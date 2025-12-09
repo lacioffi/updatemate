@@ -1,0 +1,6 @@
+PyQt6
+requests
+pefile
+cryptography
+pywin32
+signify
