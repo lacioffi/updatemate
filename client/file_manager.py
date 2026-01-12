@@ -1,41 +1,7 @@
-import pefile
-import binascii
 import win32api
-from signify.authenticode import AuthenticodeFile, AuthenticodeVerificationResult
-import hashlib
 import lief
-from cryptography import x509
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives.serialization.pkcs7 import load_der_pkcs7_certificates,load_pem_pkcs7_certificates
-
-#Pegar informações básicas de cada binário:
-    # Certificado:
-        # Ver se é válido
-        # Certificate chain e detalhes (issuer, etc.)
-    # Nome
-    # Versão
-
-
-'''Dado desejado:
-
-Arquivo:
-	infos:
-		name: chrome
-		version: 1.0w
-		publisher: whatever
-	signature:
-		pe_hash: aaaa
-		signature: bbbb
-		full_chain:
-			-blabla:
-			-blabla2:
-		valid_from: 1/1/1
-		valid_until: 1/1/1
-
-Isso permite que o servidor faça a verificação da assinatura do lado dele, mas sem receber o arquivo completo.
-
-infos, foda-se.
-'''
+import json
+from pathlib import Path
 
 def get_file_properties(fname):
     """
@@ -76,140 +42,80 @@ def get_file_properties(fname):
 
     return props
 
-
-def extract_signature_info(file_path):
-    try:
-        pe = pefile.PE(file_path)
-
-        info = pe.VS_FIXEDFILEINFO[0]
-        version_info = pe.VS_VERSIONINFO[0]
-        print(info)
-        print(version_info)
-
-        address = pe.OPTIONAL_HEADER.DATA_DIRECTORY[pefile.DIRECTORY_ENTRY['IMAGE_DIRECTORY_ENTRY_SECURITY']].VirtualAddress
-        size = pe.OPTIONAL_HEADER.DATA_DIRECTORY[pefile.DIRECTORY_ENTRY['IMAGE_DIRECTORY_ENTRY_SECURITY']].Size
-
-        if address == 0:
-            print('Error: source file not signed')
-            return
-        
-        signature = bytes(pe.write()[address+8:])
-
-        # Attempt to load as PKCS7 (P7B)
-        try:
-            pkcs7 = load_der_pkcs7_certificates(signature)
-        except ValueError:
-            # If DER fails, try PEM
-            pkcs7 = load_pem_pkcs7_certificates(signature)
-
-        certificates = []
-        for cert in pkcs7:
-            certificates.append(cert)
-
-        certificate_data = []
-        for cert in certificates:
-            cert: x509.Certificate = cert
-            certificate_data.append({
-                "subject": cert.subject,
-                "issuer": cert.issuer,
-                "version": cert.version,
-                "notvalidbefore": cert.not_valid_before_utc,
-                "notvalidafter": cert.not_valid_after_utc,
-                "signature": {cert.signature},
-            })
-            
-        return certificate_data
-
-    except pefile.PEFormatError:
-        print(f"Error: {file_path} is not a valid PE file.")
-    except Exception as e:
-        print(f"An error occurred: {e}")
-
-def extract_signature_info_signify(file_path):
-    with open(file_path, "rb") as f:
-        signed_file = AuthenticodeFile.from_stream(f)
-        for signed_data in signed_file.signatures:
-            #print(vars(signed_data))
-            #print(vars(signed_data.certificates))
-
-            for certificate in signed_data.certificates:
-                print(certificate.verify)
-
-            print(signed_data.explain_verify())
-
 def extract_signature_info_lief(file_path):
-    try:
-        binary = lief.PE.parse(file_path)
-        if binary:
-            if binary.has_signatures:
-                for signature in binary.signatures:
-                    print(signature)
-                    if signature.check():
-                        print("Signature is valid.")
-                    else:
-                        print("Signature is invalid.")
-            else:
-                print("No signatures found in the PE file.")
+    pe = lief.parse(file_path)
+    pe_signature_data = []
+    if len(pe.signatures):
+        for signature in pe.signatures:
+            signature_data = {}
+            signature_data["general"] = str(signature)
+            #print(signature.check())
+            signature_data["hash"] = str(signature.content_info.digest.hex())
+            
+            signature_data["certificates"] = []
+            for crt in signature.certificates:
+                certificate_data = {}
+                certificate_data["issuer"] = crt.issuer
+                certificate_data["subject"] = crt.subject
+                certificate_data["signature_algorithm"] = crt.signature_algorithm
+                certificate_data["signature"] = crt.signature.hex()
+                certificate_data["valid_from"] = crt.valid_from
+                certificate_data["valid_to"] = crt.valid_to
+                signature_data["certificates"].append(certificate_data)
+
+            signature_data["raw_data"] = str(signature.raw_der.hex())
+
+            pe_signature_data.append(signature_data)
+            #print(signature.signers[0]) #Not useful, i guess
+
+            #Read it back and check it
+            #detached_sig = lief.PE.Signature.parse("lief_signature.p7b")
+            #print(pe.verify_signature(detached_sig))
+    
+    return pe_signature_data
+
+def analyze_pe(FILEPATH: str):
+    pe_data = {}
+
+    pe_data["file_properties"] = get_file_properties(FILEPATH)
+    pe_data["signatures"] = extract_signature_info_lief(FILEPATH)
+
+    return pe_data
+
+def check_submission(submission_path: str):
+    #Load from JSON file/data
+    #The server will load this differently.
+    with open(submission_path, "r") as json_file:
+        data = json.load(json_file)
+
+    #Check if the hash is correct
+    for signature in data["signatures"]:
+        #Lief does not allow loading the signature from bytes, so we have to actually write to a file and then read from it. Stupid, I know.
+        signature_bytes = bytes.fromhex(signature["raw_data"])
+        Path("./temp_signature.p7b").write_bytes(signature_bytes)
+        signature_data = lief.PE.Signature.parse("./temp_signature.p7b")
+
+        #print(signature_data)
+        if signature_data.check() == lief.PE.Signature.VERIFICATION_FLAGS.OK:
+            print("Signature is valid!!")
+            return True
         else:
-            print("Could not parse the PE file.")
+            print("Signature is not valid.")
+            return False
 
-    except lief.bad_file as e:
-        print(f"Error parsing PE file: {e}")
-    except FileNotFoundError:
-        print("File not found.")
-    except Exception as e:
-        print(f"An error occurred: {e}")
+    return False 
 
-def get_pe_hash(file_path):
-    with open(file_path, "rb") as f:
-        signed_file = AuthenticodeFile.from_stream(f)
+if __name__ == "__main__": #Showcase
+    FILEPATH = r'C:\Program Files\Docker\Docker\Docker Desktop.exe'
 
-        # Get the PE hash (digest of the file content that is signed)
-        # The hash algorithm used in the signature can be found in signed_file.signed_data.digest_algorithm
-        # You can calculate the hash of the file content yourself using a library like hashlib,
-        # but signify handles the relevant parts for signature verification.
-        # The actual hash value used for verification is part of the signature structure.
-        # You can access details of the signature if needed, for instance:
-        # print(f"Digest Algorithm: {signed_file.signed_data.digest_algorithm.name}")
-        # print(f"Digest: {signed_file.signed_data.digest.hex()}")
+    print("\n\n========= Processing file =============\n\n")
 
-        for signature in signed_file.signatures:
-            print(signature.get_content_digest())
+    pe_data = analyze_pe(FILEPATH)
+    print(pe_data)
 
-def verify_pe_signature(file_path):
-    try:
-        with open(file_path, "rb") as f:
-            signed_file = AuthenticodeFile.from_stream(f)
-            status, err = signed_file.explain_verify()
+    with open("output.json", "w") as json_file:
+        json.dump(pe_data, json_file, indent=4)
 
+    print("\n\n========= CHECKING SUBMISSION ===========\n\n")
 
-            if status == AuthenticodeVerificationResult.OK:
-                print(f"Signature of '{file_path}' is valid.")
-            else:
-                print(f"Signature of '{file_path}' is invalid: {err}")
-
-    except FileNotFoundError:
-        print(f"Error: File '{file_path}' not found.")
-    except Exception as e:
-        print(f"An error occurred during verification: {e}")
-
-
-
-# Example usage:
-# Replace 'path/to/your/signed_executable.exe' with the actual path
-
-FILEPATH = r'C:\Program Files\Google\Chrome\Application\Chrome.exe'
-extract_signature_info_lief(FILEPATH)
-
-"""
-certificate_data = extract_signature_info(FILEPATH)
-properties = get_file_properties(FILEPATH)
-
-#print(certificate_data)
-print(properties)
-
-hash = get_pe_hash(FILEPATH)
-verify_pe_signature(FILEPATH)
-"""
-
-print("\n\n\n\n\n")
+    check_submission("output.json")
