@@ -9,10 +9,10 @@ import glob
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from merkle import SoftwareRegistry
 
-def run_file_test():
+def append_versions_test():
     registry = SoftwareRegistry()
     
-    # Define the path to your data folder
+    # Path to data folder
     data_folder = os.path.join(os.path.dirname(__file__), 'data')
     
     # Find all .json files in a/tests/data
@@ -25,13 +25,12 @@ def run_file_test():
     print(f"Found {len(json_files)} files. Processing...\n")
 
     # Load and process each file
-    for file_path in sorted(json_files): # Sorted to maintain consistent order
+    for file_path in json_files:
         with open(file_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
             filename = os.path.basename(file_path)
             print(f"--- Processing: {filename} ---")
             registry.add_entry(data)
 
-
 if __name__ == "__main__":
-    run_file_test()
+    append_versions_test()
