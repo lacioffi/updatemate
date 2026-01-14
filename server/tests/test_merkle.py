@@ -9,9 +9,7 @@ import glob
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from merkle import SoftwareRegistry
 
-def append_versions_test():
-    registry = SoftwareRegistry()
-    
+def append_versions_test(registry):    
     # Path to data folder
     data_folder = os.path.join(os.path.dirname(__file__), 'data')
     
@@ -30,7 +28,20 @@ def append_versions_test():
             data = json.load(f)
             filename = os.path.basename(file_path)
             print(f"--- Processing: {filename} ---")
-            registry.add_entry(data)
+            registry.add_software_version(data)
+
+    #Check if chrome (for example) is loaded correctly:
+    print('\n\n')
+    registry.get_software_data('Google Chrome')
 
 if __name__ == "__main__":
-    append_versions_test()
+    registry = SoftwareRegistry()
+    append_versions_test(registry)
+
+    #Add a review:
+    review = {"comment":"this version is malicious! It deleted all my files!"}
+    registry.add_version_review("Google_Chrome-676b876b97ce6a80327efa7ff2fd61c885a7084879ebf7655f3d3aa361775429", review)
+
+    registry.get_software_data('Google Chrome')
+    #### TO-DO: Test for adding comments.
+    #### TO-DO: Test for exploring the tree's state.
