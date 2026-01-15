@@ -65,7 +65,7 @@ class SoftwareRegistry:
         else:
             print(f"{software_version_id} not found in system. You must first upload the version's data before submitting a comment.")
 
-    def get_software_data(self, software_name):
+    def get_human_readable_report(self, software_name):
         """Standard lookup for an auditor"""
         if software_name not in self.product_trees:
             print(f"Product {software_name} not found.")
@@ -85,3 +85,29 @@ class SoftwareRegistry:
             print(f"\tReviews for version: ")
             for review in self.version_trees[version_id].leaves:
                 print(f'\t{review.data}')
+
+    def get_software_versions(self, software_name):
+        """Standard lookup for an auditor"""
+        if software_name not in self.product_trees:
+            print(f"Product {software_name} not found.")
+            return
+
+        tree: MerkleTree = self.product_trees[software_name]
+
+        version_data = []
+        for leaf in tree.leaves:
+            version_data.append(json.loads(leaf.data))
+        
+        return version_data
+    
+    def get_version_reviews(self, software_name, version_id):
+        """Standard lookup for an auditor"""
+        if software_name not in self.product_trees:
+            print(f"Product {software_name} not found.")
+            return
+
+        reviews = []
+        for review in self.version_trees[version_id].leaves:
+            reviews.append(review.data)
+
+        return reviews

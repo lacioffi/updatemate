@@ -106,7 +106,7 @@ def check_submission(submission_path: str):
     return False 
 
 if __name__ == "__main__": #Showcase
-    FILEPATH = r'C:\Program Files\Docker\Docker\Docker Desktop.exe'
+    FILEPATH = r'C:\Program Files\Google\Chrome\Application\chrome.exe'
 
     print("\n\n========= Processing file =============\n\n")
 
