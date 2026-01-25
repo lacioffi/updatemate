@@ -124,10 +124,19 @@ def check_targeted_malware(registry, software_name, version_id):
     return False
 
 if __name__ == "__main__":
-    review_ok = {"review":"OK","comment":""}
+    review_ok = {"review":"OK","comment":"This version is OK."}
     review_vulnerable = {"review":"vulnerable", "comment":"this version is vulnerable to CVE-something"}
     review_bad = {"review":"malicious", "comment":"this version is malicious! It deleted all my files!"}
 
+    # Basic test
+    print("========= BASIC TESTS =========")
+    registry = SoftwareRegistry()
+    append_versions_test(registry)
+    registry.add_version_review("Google_Chrome-676b876b97ce6a80327efa7ff2fd61c885a7084879ebf7655f3d3aa361775429", review_ok)
+    registry.add_version_review("Google_Chrome-676b876b97ce6a80327efa7ff2fd61c885a7084879ebf7655f3d3aa361775429", review_vulnerable)
+    registry.add_version_review("Google_Chrome-ec4f88362c38bfb8f17465c45f8be2614c1f9e3c0ead77ae25e8e94a9411ab5f", review_ok)
+    registry.add_version_review("Docker_Desktop_Launcher-e2bac9549c398111009c3b6825ab953b3a3c39b0fc13f1a9b1b0d1a592f28cb3", review_ok)
+    #registry.get_human_readable_report("Google Chrome", print_certs=False)
 
     # Test Freeze attack - A new version is available, but the user is unaware
     registry = SoftwareRegistry()
@@ -143,7 +152,7 @@ if __name__ == "__main__":
     registry.add_version_review("Google_Chrome-ec4f88362c38bfb8f17465c45f8be2614c1f9e3c0ead77ae25e8e94a9411ab5f", review_ok) #Newest version
     registry.add_version_review("Google_Chrome-ec4f88362c38bfb8f17465c45f8be2614c1f9e3c0ead77ae25e8e94a9411ab5f", review_ok)
     registry.add_version_review("Google_Chrome-ec4f88362c38bfb8f17465c45f8be2614c1f9e3c0ead77ae25e8e94a9411ab5f", review_ok)
-
+    registry.get_human_readable_report("Google Chrome", print_certs=False)
     check_freeze_attack(registry, "Google Chrome", "Google_Chrome-676b876b97ce6a80327efa7ff2fd61c885a7084879ebf7655f3d3aa361775429")
     print("\n")
 
@@ -161,8 +170,8 @@ if __name__ == "__main__":
     registry.add_version_review("Google_Chrome-ec4f88362c38bfb8f17465c45f8be2614c1f9e3c0ead77ae25e8e94a9411ab5f", review_ok)
     registry.add_version_review("Google_Chrome-ec4f88362c38bfb8f17465c45f8be2614c1f9e3c0ead77ae25e8e94a9411ab5f", review_ok)
 
+    registry.get_human_readable_report("Google Chrome", print_certs=False)
     check_replay_attack(registry, "Google Chrome", "Google_Chrome-ec4f88362c38bfb8f17465c45f8be2614c1f9e3c0ead77ae25e8e94a9411ab5f", "Google_Chrome-676b876b97ce6a80327efa7ff2fd61c885a7084879ebf7655f3d3aa361775429")
-    print("\n")
 
     # Test widespread malware - Software with a bunch of negative comments
     registry = SoftwareRegistry()
@@ -178,6 +187,7 @@ if __name__ == "__main__":
     registry.add_version_review("Google_Chrome-676b876b97ce6a80327efa7ff2fd61c885a7084879ebf7655f3d3aa361775429", review_bad)
     registry.add_version_review("Google_Chrome-676b876b97ce6a80327efa7ff2fd61c885a7084879ebf7655f3d3aa361775429", review_bad)
 
+    registry.get_human_readable_report("Google Chrome", print_certs=False)
     check_widespread_malware(registry, "Google Chrome", "Google_Chrome-676b876b97ce6a80327efa7ff2fd61c885a7084879ebf7655f3d3aa361775429")
     print("\n")
 
@@ -188,7 +198,12 @@ if __name__ == "__main__":
 
     print("===== Targeted malware detection test =====")
     registry.add_version_review("Google_Chrome-676b876b97ce6a80327efa7ff2fd61c885a7084879ebf7655f3d3aa361775429", review_ok)
-    check_targeted_malware(registry, "Google Chrome", "Google_Chrome-676b876b97ce6a80327efa7ff2fd61c885a7084879ebf7655f3d3aa361775429")
+    registry.add_version_review("Google_Chrome-676b876b97ce6a80327efa7ff2fd61c885a7084879ebf7655f3d3aa361775429", review_ok)
+    registry.add_version_review("Google_Chrome-676b876b97ce6a80327efa7ff2fd61c885a7084879ebf7655f3d3aa361775429", review_ok)
+    registry.add_version_review("Google_Chrome-676b876b97ce6a80327efa7ff2fd61c885a7084879ebf7655f3d3aa361775429", review_ok)
+    registry.add_version_review("Google_Chrome-676b876b97ce6a80327efa7ff2fd61c885a7084879ebf7655f3d3aa361775429", review_ok)
+    registry.get_human_readable_report("Google Chrome", print_certs=False)
+    check_targeted_malware(registry, "Google Chrome", "Google_Chrome-ec4f88362c38bfb8f17465c45f8be2614c1f9e3c0ead77ae25e8e94a9411ab5f")
 
     print("\n")
 

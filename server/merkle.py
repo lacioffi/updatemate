@@ -65,26 +65,38 @@ class SoftwareRegistry:
         else:
             print(f"{software_version_id} not found in system. You must first upload the version's data before submitting a comment.")
 
-    def get_human_readable_report(self, software_name):
+    def get_human_readable_report(self, software_name, print_certs=True):
         """Standard lookup for an auditor"""
         if software_name not in self.product_trees:
             print(f"Product {software_name} not found.")
             return
 
         tree: MerkleTree = self.product_trees[software_name]
-        print(f"\nAudit Report for {software_name}:")
+        print(f"\n======Human readable report for {software_name}======")
         print(f"Total Versions: {tree.get_size()}")
-        print(f"Latest Root Hash: {tree.root.digest}")
+        print(f"Latest Root Hash: {tree.root.digest.hex()}")
 
         for leaf in tree.leaves:
             version_data = json.loads(leaf.data)
-            print(f"\n====== Details for version: {version_data['file_properties']['StringFileInfo']['ProductVersion']}")
+            print(f"\n>>> Details for version: {version_data['file_properties']['StringFileInfo']['ProductVersion']}")
             print(f"First seen date: {version_data["first_seen"]}")
             version_id = software_name.replace(" ", "_") + '-' + version_data["signatures"][0]["hash"]
             print(f"Version ID: {version_id}")
+            print(f"Signature information:")
+            print(f"\tSignature hash: {version_data["signatures"][0]["hash"]}")
+            if(print_certs):
+                print(f"\tCertificate chain:")
+                for certificate in version_data["signatures"][0]["certificates"]:
+                    print(f"\t\tIssuer: {certificate["issuer"]}")
+                    print(f"\t\tSubject: {certificate["subject"]}")
+                    print(f"\t\tValid From: {certificate["valid_from"]}")
+                    print(f"\t\tValid To: {certificate["valid_to"]}")
             print(f"\tReviews for version: ")
-            for review in self.version_trees[version_id].leaves:
-                print(f'\t{review.data}')
+            if len(self.version_trees[version_id].leaves) == 0:
+                print("\t\tNo reviews submitted yet!")
+            else:
+                for review in self.version_trees[version_id].leaves:
+                    print(f'\t\t{review.data}')
 
     def get_software_versions(self, software_name):
         """Standard lookup for an auditor"""
