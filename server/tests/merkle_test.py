@@ -5,12 +5,14 @@ import os
 import json
 import time
 import glob
+from server.merkle import *
 
 # Path setup to import from parent directory
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from merkle import SoftwareRegistry
 
-def append_versions_test(registry):    
+def test_build_version_tree():
+    registry = SoftwareRegistry()
+
     # Path to data folder
     data_folder = os.path.join(os.path.dirname(__file__), 'data')
     
@@ -31,6 +33,8 @@ def append_versions_test(registry):
             filename = os.path.basename(file_path)
             print(f"--- Processing: {filename} ---")
             registry.add_software_version(data)
+    
+    print(registry)
 
 #Heuristics (will be moved to another file in the future)
 def check_freeze_attack(registry, software_name, version_id):
@@ -123,6 +127,8 @@ def check_targeted_malware(registry, software_name, version_id):
         return True
     return False
 
+
+""" 
 if __name__ == "__main__":
     review_ok = {"review":"OK","comment":"This version is OK."}
     review_vulnerable = {"review":"vulnerable", "comment":"this version is vulnerable to CVE-something"}
@@ -207,4 +213,4 @@ if __name__ == "__main__":
 
     print("\n")
 
-    
+     """

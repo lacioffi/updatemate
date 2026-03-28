@@ -2,7 +2,6 @@ import json
 from pathlib import Path
 from client.file_manager import analyze_pe
 
-
 def test_analyze_pe():
     # Path to the binary file
     binary_path = Path(__file__).parent / "data" / "chrome.exe"
