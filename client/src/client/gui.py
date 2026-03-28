@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import (
     QMainWindow,
     QFrame
 )
-from client.api_client import APIClient
+from client_.api_client import APIClient
 
 
 class MainWindow(QWidget):

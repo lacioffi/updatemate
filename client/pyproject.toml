@@ -1,0 +1,20 @@
+[project]
+name = "client"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "lacioffi",email = "lucasacioffi@gmail.com"}
+]
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "pathlib (>=1.0.1,<2.0.0)",
+    "pyqt6 (>=6.10.2,<7.0.0)"
+]
+
+[tool.poetry]
+packages = [{include = "client", from = "src"}]
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
