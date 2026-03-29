@@ -1,6 +1,7 @@
 import json
 from pymerkle import InmemoryTree as MerkleTree
 from datetime import datetime
+from up2date_server.classes import SoftwareVersion
 
 class SoftwareRegistry:
     def __init__(self):
@@ -11,27 +12,24 @@ class SoftwareRegistry:
         # User input: For each software version, keeps track of received user comments
         self.version_trees = {}
 
-    def add_software_version(self, sw_json_data): 
+    def add_software_version(self, software_version: SoftwareVersion): 
         """
         1. Finds/Creates product tree.
         2. Appends full file to product tree.
         3. If it's the first time seeing the product, registers it in Master.
-        OBS: Receives the entire JSON as input
         """
-        props = sw_json_data.get("file_properties", {}).get("StringFileInfo", {})
-        software_name = props.get("ProductName", "Unknown")
-        print(software_name)
+        software_name = software_version.file_properties.StringFileInfo["ProductName"]
         
         #Add first seen date to software/version
         now = datetime.now()
         current_time_string = now.strftime("%Y-%m-%d %H:%M:%S")
-        sw_json_data["first_seen"] = current_time_string
+        software_version.first_seen = current_time_string
 
         # Consistent serialization for the audit log
-        software_data = json.dumps(sw_json_data, sort_keys=True)
-        
-        software_version_hash = sw_json_data["signatures"][0]["hash"]
+        software_version_hash = software_version.signatures[0].hash
         software_version_id = software_name.replace(" ", "_")  + "-" + software_version_hash
+
+        software_data = json.dumps(software_version.__dict__, default=lambda o: o.__dict__, sort_keys=True) # Sort keys for consistent hashing
 
         if software_name not in self.product_trees:
             # Create the product-specific tree    
@@ -79,7 +77,8 @@ class SoftwareRegistry:
 
         for leaf in tree.leaves:
             version_data = json.loads(leaf.data)
-            output += f"\n>>> Details for version: {version_data['file_properties']['StringFileInfo']['ProductVersion']}\n"
+            software_version = SoftwareVersion(version_data)
+            output += f"\n>>> Details for version: {software_version.file_properties.StringFileInfo['ProductVersion']}\n"
             output += f"First seen date: {version_data['first_seen']}\n"
             version_id = software_name.replace(" ", "_") + '-' + version_data["signatures"][0]["hash"]
             output += f"Version ID: {version_id}\n"

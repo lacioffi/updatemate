@@ -4,6 +4,9 @@ from flask import Flask
 from db import db
 from routes import api_bp
 from sqlalchemy import create_engine
+from up2date_server.merkle import MerkleTree
+
+main_registry = MerkleTree()  # Master tree for all software products
 
 def wait_for_db(db_url, retries=10, delay=1.5):
     """Simple retry loop to wait for Postgres to be ready."""
@@ -33,8 +36,6 @@ def create_app():
 
     with app.app_context():
         db.create_all()
-
-
 
 if __name__ == '__main__':
     port = int(os.environ.get('SERVER_PORT', 5000))

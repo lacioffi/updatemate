@@ -7,6 +7,7 @@ import time
 import glob
 import pytest
 from up2date_server.merkle import SoftwareRegistry
+from up2date_server.classes import SoftwareVersion
 
 # Path setup to import from parent directory
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -21,18 +22,19 @@ def test_build_version_tree():
     json_files = glob.glob(os.path.join(data_folder, "*.json"))
     
     if not json_files:
-        print(f"No JSON files found in {data_folder}")
+        #print(f"No JSON files found in {data_folder}")
         return
 
-    print(f"Found {len(json_files)} files. Processing...\n")
+    #print(f"Found {len(json_files)} files. Processing...\n")
 
     # Load and process each file
     for file_path in json_files:
         with open(file_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
+            data = json.loads(f.read())
+            software_version = SoftwareVersion(data)
             filename = os.path.basename(file_path)
-            print(f"--- Processing: {filename} ---")
-            registry.add_software_version(data)
+            #print(f"--- Processing: {filename} ---")
+            registry.add_software_version(software_version)
 
 @pytest.fixture
 def build_test_tree():
@@ -45,15 +47,17 @@ def build_test_tree():
     json_files = glob.glob(os.path.join(data_folder, "*.json"))
     
     if not json_files:
-        print(f"No JSON files found in {data_folder}")
+        #print(f"No JSON files found in {data_folder}")
         return
 
     # Load and process each file
     for file_path in json_files:
         with open(file_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
+            data = json.loads(f.read())
+            software_version = SoftwareVersion(data)
             filename = os.path.basename(file_path)
-            registry.add_software_version(data)
+            #print(f"--- Processing: {filename} ---")
+            registry.add_software_version(software_version)
     
     return registry
 
