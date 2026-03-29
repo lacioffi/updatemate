@@ -1,5 +1,5 @@
 [project]
-name = "server"
+name = "up2date_server"
 version = "0.1.0"
 description = ""
 authors = [
@@ -21,7 +21,7 @@ dev = [
 ]
 
 [tool.poetry]
-packages = [{include = "server", from = "src"}]
+packages = [{include = "up2date_server", from = "src"}]
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]

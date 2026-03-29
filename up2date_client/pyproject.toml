@@ -1,5 +1,5 @@
 [project]
-name = "client"
+name = "up2date_client"
 version = "0.1.0"
 description = ""
 authors = [
@@ -9,13 +9,12 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "pathlib (>=1.0.1,<2.0.0)",
-    "pyqt6 (>=6.10.2,<7.0.0)",
     "pywin32 (>=311,<312)",
     "lief (>=0.17.6,<0.18.0)"
 ]
 
 [tool.poetry]
-packages = [{include = "client", from = "src"}]
+packages = [{include = "up2date_client", from = "src"}]
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]

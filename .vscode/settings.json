@@ -1,0 +1,5 @@
+{
+    "python.analysis.extraPaths": [
+        "./up2date_server/src"
+    ]
+}

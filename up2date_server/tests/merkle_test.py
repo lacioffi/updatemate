@@ -5,7 +5,7 @@ import os
 import json
 import time
 import glob
-from server.merkle import *
+from up2date_server.merkle import SoftwareRegistry
 
 # Path setup to import from parent directory
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -27,7 +27,6 @@ def test_build_version_tree():
 
     # Load and process each file
     for file_path in json_files:
-        time.sleep(1)
         with open(file_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
             filename = os.path.basename(file_path)
