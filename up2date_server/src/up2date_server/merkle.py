@@ -1,7 +1,7 @@
 import json
 from pymerkle import InmemoryTree as MerkleTree
 from datetime import datetime
-from up2date_server.classes import SoftwareVersion
+from up2date_server.classes import SoftwareVersion, SoftwareReview
 
 class SoftwareRegistry:
     def __init__(self):
@@ -49,15 +49,14 @@ class SoftwareRegistry:
                 print(f"[UPDATED] {software_name} tree now has {self.product_trees[software_name].get_size()} entries.")
                 self.version_trees[software_version_id] = MerkleTree()
 
-    def add_version_review(self, software_version_id, review):
+    def add_version_review(self, software_version_id, review: SoftwareReview):
         if software_version_id in self.version_trees:
             #Add received date
             now = datetime.now()
             current_time_string = now.strftime("%Y-%m-%d %H:%M:%S")
-            review["time_received"] = current_time_string
+            review.time_received = current_time_string
 
-            review_data = json.dumps(review, sort_keys=True)
-
+            review_data = json.dumps(review.__dict__, default=lambda o: o.__dict__, sort_keys=True) # Sort keys for consistent hashing
             self.version_trees[software_version_id].append_entry(review_data.encode('utf-8'))
 
         else:

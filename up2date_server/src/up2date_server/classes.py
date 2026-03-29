@@ -36,3 +36,10 @@ class SoftwareVersion:
         ]
 
         self.first_seen: Optional[str] = None
+
+class SoftwareReview:
+    def __init__(self, data: dict):
+        self.reviewer: str = data["reviewer"]
+        self.comment: str = data["comment"]
+        self.review: str = data["review"]
+        self.time_received: Optional[str] = None

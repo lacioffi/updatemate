@@ -6,7 +6,7 @@ import json
 import time
 import glob
 import pytest
-from up2date_server.merkle import SoftwareRegistry
+from up2date_server.merkle import SoftwareRegistry, SoftwareReview
 from up2date_server.classes import SoftwareVersion
 
 # Path setup to import from parent directory
@@ -72,6 +72,19 @@ def test_human_readable_report(build_test_tree):
     registry = build_test_tree
     report = registry.get_human_readable_report("Google Chrome", print_certs=False)
     assert "Version ID: Google_Chrome-ec4f88362c38bfb8f17465c45f8be2614c1f9e3c0ead77ae25e8e94a9411ab5f" in report
+
+def test_add_review(build_test_tree):
+    registry = build_test_tree
+    review_data = {
+        "reviewer": "Alice",
+        "comment": "This version is vulnerable to CVE-something.",
+        "review": "vulnerable"
+    }
+    review = SoftwareReview(review_data)
+    registry.add_version_review("Google_Chrome-676b876b97ce6a80327efa7ff2fd61c885a7084879ebf7655f3d3aa361775429", review)
+    reviews = registry.get_version_reviews("Google Chrome", "Google_Chrome-676b876b97ce6a80327efa7ff2fd61c885a7084879ebf7655f3d3aa361775429")
+    assert len(reviews) == 1
+    assert json.loads(reviews[0])["review"] == "vulnerable"
 
 """ #Heuristics (will be moved to another file in the future)
 def check_freeze_attack(registry, software_name, version_id):
