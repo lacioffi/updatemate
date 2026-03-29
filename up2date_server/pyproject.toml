@@ -12,7 +12,8 @@ dependencies = [
     "psycopg2-binary (>=2.9.11,<3.0.0)",
     "pymerkle (>=6.1.0,<7.0.0)",
     "requests (>=2.33.0,<3.0.0)",
-    "flask-sqlalchemy (>=3.1.1,<4.0.0)"
+    "flask-sqlalchemy (>=3.1.1,<4.0.0)",
+    "pytest (>=9.0.2,<10.0.0)"
 ]
 
 [dependency-groups]

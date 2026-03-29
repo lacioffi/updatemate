@@ -5,6 +5,7 @@ import os
 import json
 import time
 import glob
+import pytest
 from up2date_server.merkle import SoftwareRegistry
 
 # Path setup to import from parent directory
@@ -32,10 +33,43 @@ def test_build_version_tree():
             filename = os.path.basename(file_path)
             print(f"--- Processing: {filename} ---")
             registry.add_software_version(data)
-    
-    print(registry)
 
-#Heuristics (will be moved to another file in the future)
+@pytest.fixture
+def build_test_tree():
+    registry = SoftwareRegistry()
+
+    # Path to data folder
+    data_folder = os.path.join(os.path.dirname(__file__), 'data')
+    
+    # Find all .json files in a/tests/data
+    json_files = glob.glob(os.path.join(data_folder, "*.json"))
+    
+    if not json_files:
+        print(f"No JSON files found in {data_folder}")
+        return
+
+    # Load and process each file
+    for file_path in json_files:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            filename = os.path.basename(file_path)
+            registry.add_software_version(data)
+    
+    return registry
+
+def test_get_software_versions(build_test_tree):
+    registry = build_test_tree
+    versions = registry.get_software_versions("Google Chrome")
+    assert len(versions) == 2
+    assert versions[0]["signatures"][0]["hash"] == "676b876b97ce6a80327efa7ff2fd61c885a7084879ebf7655f3d3aa361775429"
+    assert versions[1]["signatures"][0]["hash"] == "ec4f88362c38bfb8f17465c45f8be2614c1f9e3c0ead77ae25e8e94a9411ab5f"
+
+def test_human_readable_report(build_test_tree):
+    registry = build_test_tree
+    report = registry.get_human_readable_report("Google Chrome", print_certs=False)
+    assert "Version ID: Google_Chrome-ec4f88362c38bfb8f17465c45f8be2614c1f9e3c0ead77ae25e8e94a9411ab5f" in report
+
+""" #Heuristics (will be moved to another file in the future)
 def check_freeze_attack(registry, software_name, version_id):
     #Get all versions for software
     registry: SoftwareRegistry = registry
@@ -124,7 +158,7 @@ def check_targeted_malware(registry, software_name, version_id):
     if comment_count < 2:
         print(f"There are very few comments for this version ({comment_count}). You may have received a targeted, malicious version. Proceed with caution.")
         return True
-    return False
+    return False """
 
 
 """ 
