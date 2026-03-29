@@ -22,6 +22,14 @@ def add_software_version():
         return jsonify({"error": str(e)}), 400
     return jsonify({"message": "Version added successfully"}), 201
 
+@api_bp.route('/software/<version_id>', methods=['GET'])
+def get_software_review(version_id):
+    try:
+        reviews = main_registry.get_version_reviews(version_id)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"reviews": reviews}), 200
+
 @api_bp.route('/software/<version_id>/add_review', methods=['POST'])
 def add_software_review(version_id):
     data = request.get_json() or {}

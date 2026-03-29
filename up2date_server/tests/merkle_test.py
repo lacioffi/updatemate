@@ -82,9 +82,14 @@ def test_add_review(build_test_tree):
     }
     review = SoftwareReview(review_data)
     registry.add_version_review("Google_Chrome-676b876b97ce6a80327efa7ff2fd61c885a7084879ebf7655f3d3aa361775429", review)
-    reviews = registry.get_version_reviews("Google Chrome", "Google_Chrome-676b876b97ce6a80327efa7ff2fd61c885a7084879ebf7655f3d3aa361775429")
+    reviews = registry.get_version_reviews("Google_Chrome-676b876b97ce6a80327efa7ff2fd61c885a7084879ebf7655f3d3aa361775429")
     assert len(reviews) == 1
     assert json.loads(reviews[0])["review"] == "vulnerable"
+
+def test_get_version_reviews(build_test_tree):
+    registry = build_test_tree
+    reviews = registry.get_version_reviews("Google_Chrome-676b876b97ce6a80327efa7ff2fd61c885a7084879ebf7655f3d3aa361775429")
+    assert len(reviews) == 0
 
 """ #Heuristics (will be moved to another file in the future)
 def check_freeze_attack(registry, software_name, version_id):

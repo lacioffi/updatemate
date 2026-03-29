@@ -114,11 +114,8 @@ class SoftwareRegistry:
         
         return version_data
     
-    def get_version_reviews(self, software_name, version_id):
+    def get_version_reviews(self, version_id):
         """Standard lookup for an auditor"""
-        if software_name not in self.product_trees:
-            print(f"Product {software_name} not found.")
-            return
 
         reviews = []
         for review in self.version_trees[version_id].leaves:
