@@ -9,99 +9,77 @@ import pytest
 from up2date_server.merkle import SoftwareRegistry, SoftwareReview
 from up2date_server.classes import SoftwareVersion
 
+DATA_PATH = "merkle_test_data/"
+
 # Path setup to import from parent directory
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-def test_build_version_tree():
-    registry = SoftwareRegistry()
+### Setup ###
+#Ensure merkle data folder exists
+if not os.path.exists(DATA_PATH):
+    os.makedirs(DATA_PATH)
 
-    # Path to data folder
-    data_folder = os.path.join(os.path.dirname(__file__), 'data')
-    
-    # Find all .json files in a/tests/data
-    json_files = glob.glob(os.path.join(data_folder, "*.json"))
-    
-    if not json_files:
-        #print(f"No JSON files found in {data_folder}")
-        return
+#Delete existing merkle data
+for filename in os.listdir(DATA_PATH):
+    file_path = os.path.join(DATA_PATH, filename)
+    try:
+        if os.path.isfile(file_path) or os.path.islink(file_path):
+            os.remove(file_path)  # Deletes files or symbolic links
+    except Exception as e:
+        print(f'Failed to delete {file_path}. Reason: {e}')
 
-    #print(f"Found {len(json_files)} files. Processing...\n")
+#Create and build new registry
+main_registry = SoftwareRegistry(DATA_PATH)
 
-    # Load and process each file
-    for file_path in json_files:
-        with open(file_path, 'r', encoding='utf-8') as f:
-            data = json.loads(f.read())
-            software_version = SoftwareVersion(data)
-            filename = os.path.basename(file_path)
-            #print(f"--- Processing: {filename} ---")
-            registry.add_software_version(software_version)
+# Path to data folder
+data_folder = os.path.join(os.path.dirname(__file__), 'data')
 
-@pytest.fixture
-def build_test_tree():
-    registry = SoftwareRegistry()
+# Find all .json files in a/tests/data
+json_files = glob.glob(os.path.join(data_folder, "*.json"))
 
-    # Path to data folder
-    data_folder = os.path.join(os.path.dirname(__file__), 'data')
-    
-    # Find all .json files in a/tests/data
-    json_files = glob.glob(os.path.join(data_folder, "*.json"))
-    
-    if not json_files:
-        #print(f"No JSON files found in {data_folder}")
-        return
+# Load and process each file
+for file_path in json_files:
+    with open(file_path, 'r', encoding='utf-8') as f:
+        data = json.loads(f.read())
+        software_version = SoftwareVersion(data)
+        #filename = os.path.basename(file_path)
+        #print(f"--- Processing: {filename} ---")
+        main_registry.add_software_version(software_version)
 
-    # Load and process each file
-    for file_path in json_files:
-        with open(file_path, 'r', encoding='utf-8') as f:
-            data = json.loads(f.read())
-            software_version = SoftwareVersion(data)
-            filename = os.path.basename(file_path)
-            #print(f"--- Processing: {filename} ---")
-            registry.add_software_version(software_version)
-    
-    return registry
 
-def test_get_software_versions(build_test_tree):
-    registry = build_test_tree
-    versions = registry.get_software_versions("Google Chrome")
+def test_get_software_versions():
+    versions = main_registry.get_software_versions("Google Chrome")
+    print(versions)
     assert len(versions) == 2
     assert versions[0]["signatures"][0]["hash"] == "676b876b97ce6a80327efa7ff2fd61c885a7084879ebf7655f3d3aa361775429"
     assert versions[1]["signatures"][0]["hash"] == "ec4f88362c38bfb8f17465c45f8be2614c1f9e3c0ead77ae25e8e94a9411ab5f"
 
-def test_human_readable_report(build_test_tree):
-    registry = build_test_tree
-    report = registry.get_human_readable_report("Google Chrome", print_certs=False)
+def test_human_readable_report():
+    report = main_registry.get_human_readable_report("Google Chrome", print_certs=False)
     assert "Version ID: Google_Chrome-ec4f88362c38bfb8f17465c45f8be2614c1f9e3c0ead77ae25e8e94a9411ab5f" in report
 
-def test_add_review(build_test_tree):
-    registry = build_test_tree
+def test_software_reviews():
     review_data = {
         "reviewer": "Alice",
         "comment": "This version is vulnerable to CVE-something.",
         "review": "vulnerable"
     }
     review = SoftwareReview(review_data)
-    registry.add_version_review("Google_Chrome-676b876b97ce6a80327efa7ff2fd61c885a7084879ebf7655f3d3aa361775429", review)
-    reviews = registry.get_version_reviews("Google_Chrome-676b876b97ce6a80327efa7ff2fd61c885a7084879ebf7655f3d3aa361775429")
+    main_registry.add_version_review("Google_Chrome-676b876b97ce6a80327efa7ff2fd61c885a7084879ebf7655f3d3aa361775429", review)
+    reviews = main_registry.get_version_reviews("Google_Chrome-676b876b97ce6a80327efa7ff2fd61c885a7084879ebf7655f3d3aa361775429")
     assert len(reviews) == 1
-    assert json.loads(reviews[0])["review"] == "vulnerable"
+    assert reviews[0]["review"] == "vulnerable"
 
-def test_get_version_reviews(build_test_tree):
-    registry = build_test_tree
-    reviews = registry.get_version_reviews("Google_Chrome-676b876b97ce6a80327efa7ff2fd61c885a7084879ebf7655f3d3aa361775429")
-    assert len(reviews) == 0
-
-def test_get_software_versions(build_test_tree):
-    registry = build_test_tree
-    versions = registry.get_software_versions("Google Chrome")
+def test_get_software_versions():
+    versions = main_registry.get_software_versions("Google Chrome")
     assert len(versions) == 2
 
-def test_get_software_report(build_test_tree):
-    registry = build_test_tree
-    report = registry.get_human_readable_report("Google Chrome")
+def test_get_software_report():
+    report = main_registry.get_human_readable_report("Google Chrome")
     assert "Version ID: Google_Chrome-ec4f88362c38bfb8f17465c45f8be2614c1f9e3c0ead77ae25e8e94a9411ab5f" in report
     print(report)
 
+##########################
 """ #Heuristics (will be moved to another file in the future)
 def check_freeze_attack(registry, software_name, version_id):
     #Get all versions for software

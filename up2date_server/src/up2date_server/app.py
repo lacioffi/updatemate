@@ -6,7 +6,8 @@ from routes import api_bp
 from sqlalchemy import create_engine
 from up2date_server.merkle import SoftwareRegistry
 
-main_registry = SoftwareRegistry()  # Master registry for all software products
+DATA_PATH = "merkle_data/"  # Path to store Merkle trees and data files
+main_registry = SoftwareRegistry(DATA_PATH)  # Master registry for all software products
 
 def wait_for_db(db_url, retries=10, delay=1.5):
     """Simple retry loop to wait for Postgres to be ready."""
@@ -34,8 +35,6 @@ def create_app():
     db.init_app(app)
     app.register_blueprint(api_bp)
 
-    with app.app_context():
-        db.create_all()
 
 if __name__ == '__main__':
     port = int(os.environ.get('SERVER_PORT', 5000))
