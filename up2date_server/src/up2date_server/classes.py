@@ -36,6 +36,7 @@ class SoftwareVersion:
         ]
 
         self.first_seen: Optional[str] = None
+        self.version_id: Optional[str] = None
 
 class SoftwareReview:
     def __init__(self, data: dict):

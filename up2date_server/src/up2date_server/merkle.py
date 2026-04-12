@@ -25,6 +25,7 @@ class SoftwareRegistry:
         # Consistent serialization for the audit log
         software_version_hash = software_version.signatures[0].hash
         software_version_id = software_name.replace(" ", "_")  + "-" + software_version_hash
+        software_version.version_id = software_version_id
 
         software_data = json.dumps(software_version.__dict__, default=lambda o: o.__dict__, sort_keys=True) # Sort keys for consistent hashing
 
