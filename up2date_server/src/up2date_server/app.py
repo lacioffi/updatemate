@@ -4,9 +4,9 @@ from flask import Flask
 from db import db
 from routes import api_bp
 from sqlalchemy import create_engine
-from up2date_server.merkle import MerkleTree
+from up2date_server.merkle import SoftwareRegistry
 
-main_registry = MerkleTree()  # Master tree for all software products
+main_registry = SoftwareRegistry()  # Master registry for all software products
 
 def wait_for_db(db_url, retries=10, delay=1.5):
     """Simple retry loop to wait for Postgres to be ready."""

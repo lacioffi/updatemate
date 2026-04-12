@@ -91,6 +91,17 @@ def test_get_version_reviews(build_test_tree):
     reviews = registry.get_version_reviews("Google_Chrome-676b876b97ce6a80327efa7ff2fd61c885a7084879ebf7655f3d3aa361775429")
     assert len(reviews) == 0
 
+def test_get_software_versions(build_test_tree):
+    registry = build_test_tree
+    versions = registry.get_software_versions("Google Chrome")
+    assert len(versions) == 2
+
+def test_get_software_report(build_test_tree):
+    registry = build_test_tree
+    report = registry.get_human_readable_report("Google Chrome")
+    assert "Version ID: Google_Chrome-ec4f88362c38bfb8f17465c45f8be2614c1f9e3c0ead77ae25e8e94a9411ab5f" in report
+    print(report)
+
 """ #Heuristics (will be moved to another file in the future)
 def check_freeze_attack(registry, software_name, version_id):
     #Get all versions for software
