@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import (
     QMainWindow,
     QFrame
 )
-from client_.api_client import APIClient
+from up2date_client.api_client import APIClient
 
 
 class MainWindow(QWidget):
@@ -51,7 +51,7 @@ class MainWindow(QWidget):
 
         self.setLayout(main)
 
-        self.load_items()
+        #self.load_items()
 
     def load_items(self):
         try:
@@ -77,9 +77,12 @@ class MainWindow(QWidget):
             QMessageBox.critical(self, 'Error', f'Could not add item:\n{e}')
 
 
-if __name__ == '__main__':
+def run_app():
     app = QApplication(sys.argv)
     server_url = os.environ.get('SERVER_URL', 'http://localhost:5000')
     window = MainWindow(api_base=server_url)
     window.show()
     sys.exit(app.exec())
+
+if __name__ == '__main__':
+    run_app()

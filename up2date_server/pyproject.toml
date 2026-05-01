@@ -32,3 +32,6 @@ build-backend = "poetry.core.masonry.api"
 
 [pytest]
 addopts = ["--import-mode=importlib"]
+
+[project.scripts]
+up2date_server = "up2date_server.app:main"

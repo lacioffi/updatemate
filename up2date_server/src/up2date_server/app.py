@@ -8,8 +8,11 @@ def create_app():
     app.register_blueprint(api_bp)
     return app
 
-if __name__ == '__main__':
+def main():
     port = int(os.environ.get('SERVER_PORT', 5000))
     debug = bool(os.environ.get('DEBUG', False))
     app = create_app()
     app.run(host='0.0.0.0', port=port, debug=debug)
+
+if __name__ == '__main__':
+    main()

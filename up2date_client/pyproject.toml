@@ -24,3 +24,6 @@ build-backend = "poetry.core.masonry.api"
 dev = [
     "pytest (>=9.0.2,<10.0.0)"
 ]
+
+[project.scripts]
+up2date_client = "up2date_client.gui:run_app"
