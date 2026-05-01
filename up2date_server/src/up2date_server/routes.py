@@ -1,10 +1,13 @@
 from flask import Blueprint, json, request, jsonify
-from db import db
 #from models import Item
 from up2date_server.classes import SoftwareReview, SoftwareVersion
-from up2date_server.app import main_registry
+from up2date_server.registry import main_registry
 
 api_bp = Blueprint('api', __name__)
+
+@api_bp.route('/', methods=['GET'])
+def health_check():
+    return "Working Gr8! :::;)"
 
 @api_bp.route('/health-check', methods=['GET'])
 def health_check():
@@ -51,9 +54,9 @@ def get_software_reviews(software_name):
     return jsonify({"report": report}), 200
 
 @api_bp.route('/software/<software_name>/versions', methods=['GET'])
-def get_software_reviews(software_name):
+def get_software_versions(software_name):
     try:
-        reviews = main_registry.get_software_versions(software_name)
+        versions = main_registry.get_software_versions(software_name)
     except Exception as e:
         return jsonify({"error": str(e)}), 400
-    return jsonify({"reviews": reviews}), 200
+    return jsonify({"versions": versions}), 200
