@@ -6,8 +6,8 @@ from up2date_server.registry import main_registry
 api_bp = Blueprint('api', __name__)
 
 @api_bp.route('/', methods=['GET'])
-def health_check():
-    return "Working Gr8! :::;)"
+def index():
+    return "Working Gr7! :::;)"
 
 @api_bp.route('/health-check', methods=['GET'])
 def health_check():

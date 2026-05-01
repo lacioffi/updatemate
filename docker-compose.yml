@@ -4,10 +4,6 @@ services:
   db:
     image: postgres:15
     container_name: myproject-db
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_DB: ${POSTGRES_DB:-mydb}
     ports:
       - "5432:5432"
     volumes:
@@ -22,7 +18,6 @@ services:
     build: ./server
     container_name: myproject-server
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-mydb}
       FLASK_ENV: development
       SERVER_PORT: ${SERVER_PORT:-5000}
     ports:

@@ -29,3 +29,6 @@ packages = [{include = "up2date_server", from = "src"}]
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
+
+[pytest]
+addopts = ["--import-mode=importlib"]
