@@ -10,7 +10,8 @@ requires-python = ">=3.13"
 dependencies = [
     "pathlib (>=1.0.1,<2.0.0)",
     "pywin32 (>=311,<312)",
-    "lief (>=0.17.6,<0.18.0)"
+    "lief (>=0.17.6,<0.18.0)",
+    "pyqt5-qt (==5.15.2)",
 ]
 
 [tool.poetry]
