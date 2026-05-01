@@ -7,7 +7,7 @@ api_bp = Blueprint('api', __name__)
 
 @api_bp.route('/', methods=['GET'])
 def index():
-    return "Working Gr7! :::;)"
+    return "Working Gr8! :::;)"
 
 @api_bp.route('/health-check', methods=['GET'])
 def health_check():
