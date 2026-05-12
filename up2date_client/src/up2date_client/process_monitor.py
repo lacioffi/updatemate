@@ -100,6 +100,7 @@ class ProcessMonitor(QThread):
                     "path": path,
                     "process_name": path.split("\\")[-1],
                     "using_etw": using_etw,
+                    "program_name": pe_data.get("file_properties", {}).get("StringFileInfo", {}).get("ProductName"),
                 }
                 self.process_ready.emit(pe_data)
 
