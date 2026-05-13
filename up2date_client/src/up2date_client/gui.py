@@ -1,6 +1,7 @@
 import sys
 import json
 from datetime import datetime
+import logging
 
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget,
@@ -12,6 +13,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal
 from PyQt5.QtGui import QColor, QFont
 
+from up2date_client.file_manager import analyze_pe
 from up2date_client.process_monitor import ProcessMonitor
 from up2date_client.api_client import APIClient
 
@@ -21,6 +23,7 @@ _COLS = ["Time", "PID", "Program Name", "Process Name", "Company", "Version", "S
 _GREEN = QColor("#2ecc71")
 _RED   = QColor("#e74c3c")
 
+logging.basicConfig(level=logging.DEBUG)
 
 class HealthCheckWorker(QThread):
     status_changed = pyqtSignal(bool)
@@ -42,41 +45,32 @@ class HealthCheckWorker(QThread):
     def stop(self):
         self.running = False
 
+class ProcessGetDetailsWorker(QThread):
+        details_ready = pyqtSignal(dict)
+        error_occurred = pyqtSignal(str)
+    
+        def __init__(self, program_name: str, api_client: APIClient):
+            super().__init__()
+            self.program_name = program_name
+            self._api_client = api_client
+            self.process_details = {"report":"", "reviews": []}           
+    
+        def run(self):
+            try:
+                response = self._api_client.get_software_report(self.program_name)
+                report = response.get("report", {})
+                if report:
+                    logging.debug(f"Received report for {self.program_name} (non-null)")
+                else:
+                    logging.debug(f"No report found for {self.program_name}")
+                self.process_details["report"] = report
 
-class SoftwareDataWorker(QThread):
-    data_ready = pyqtSignal(dict)
+                #TODO: fetch reviews when endpoint is ready
+                self.details_ready.emit(self.process_details)
 
-    def __init__(self, api_client, program_name, file_version):
-        super().__init__()
-        self.api_client = api_client
-        self.program_name = program_name
-        self.file_version = file_version
-
-    def run(self):
-        data = {
-            "program_name": self.program_name,
-            "file_version": self.file_version,
-            "is_known": False,
-            "review_count": 0,
-            "report": None,
-            "reviews": None
-        }
-
-        try:
-            report = self.api_client.get_software_report(self.program_name)
-            data["report"] = report.get("report", {})
-            data["is_known"] = True
-        except Exception:
-            pass
-
-        try:
-            reviews = self.api_client.get_version_reviews(self.file_version)
-            data["reviews"] = reviews.get("reviews", [])
-            data["review_count"] = len(data["reviews"])
-        except Exception:
-            pass
-
-        self.data_ready.emit(data)
+            except Exception as exc:
+                logging.error(f"Error fetching software report for {self.program_name}: {exc}")
+                self.error_occurred.emit(f"Failed to retrieve software report: {exc}")
 
 def _item(text: str, color: QColor | None = None) -> QTableWidgetItem:
     it = QTableWidgetItem(str(text))
@@ -103,6 +97,8 @@ class MainWindow(QMainWindow):
         self._health_worker = HealthCheckWorker(self._api_client)
         self._health_worker.status_changed.connect(self._set_server_status)
         self._health_worker.start()
+
+        self._workers = []
 
         self._records: list[dict] = []
         self._build_ui()
@@ -239,7 +235,6 @@ class MainWindow(QMainWindow):
             (file_version,                        None),
             (signed_text,                         signed_col),
             ("",                                  None),
-            ("",                                  None),
         ]):
             self._table.setItem(row, col, _item(text, color))
 
@@ -248,27 +243,24 @@ class MainWindow(QMainWindow):
             f"Detected: {program_name} (PID {meta['pid']})"
         )
 
-        #if sigs:
-            #worker = SoftwareDataWorker(self._api_client, program_name, file_version)
-            #worker.data_ready.connect(lambda data: self._on_software_data(row, data))
-            #worker.start()
+        if sigs and program_name:
+            logging.debug(f"Fetching report for {program_name}...")
+            getDetailsWorker = ProcessGetDetailsWorker(program_name, self._api_client)
+            self._workers.append(getDetailsWorker)  # keep reference to prevent GC
+            self._workers[-1].details_ready.connect(lambda x: self._update_program_with_details(details=x, table_row=row, record_index=len(self._records) - 1))
+            self._workers[-1].start()
 
     def _on_error(self, msg: str):
         self.statusBar().showMessage(f"Error: {msg}")
         self._start_btn.setText("Start Monitoring")
 
-    def _on_software_data(self, row: int, data: dict):
-        known_text = "✓" if data["is_known"] else ""
-        known_col = _GREEN if data["is_known"] else None
-        review_count = str(data["review_count"])
-
-        self._table.setItem(row, 6, _item(known_text, known_col))
-        self._table.setItem(row, 7, _item(review_count, None))
-
-        if row < len(self._records):
-            self._records[row]["_software_data"] = data
-
     # ------------------------------------------------------------------
+
+    def _update_program_with_details(self, details: dict, table_row: int, record_index: int):
+        self._records[record_index]["_meta"]["report"] = details["report"]
+        if details["report"]:
+            self._table.setItem(table_row, len(_COLS) - 2, _item("YES"))
+        self._table.setItem(table_row, len(_COLS) - 1, _item("This will be filled with the number of reviews..."))
 
     def _on_select(self):
         rows = self._table.selectionModel().selectedRows()
@@ -312,18 +304,13 @@ class MainWindow(QMainWindow):
             sig_node.setExpanded(True)
             self._sig_tree.addTopLevelItem(sig_node)
 
-        software_data = pe_data.get("_software_data", {})
-        report = software_data.get("report")
+        report = pe_data.get("_meta").get("report", "")
         if report:
-            self._report_text.setPlainText(json.dumps(report, indent=2, default=str))
+            self._report_text.setPlainText(report)
         else:
             self._report_text.setPlainText("No report data available")
 
-        reviews = software_data.get("reviews", [])
-        if reviews:
-            self._reviews_text.setPlainText(json.dumps(reviews, indent=2, default=str))
-        else:
-            self._reviews_text.setPlainText("No reviews available")
+        self._reviews_text.setPlainText("(Reviews feature coming soon)")
 
     # ------------------------------------------------------------------
 

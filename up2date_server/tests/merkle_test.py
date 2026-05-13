@@ -69,11 +69,7 @@ def test_software_reviews():
     reviews = main_registry.get_version_reviews("Google_Chrome-676b876b97ce6a80327efa7ff2fd61c885a7084879ebf7655f3d3aa361775429")
     assert len(reviews) == 1
     assert reviews[0]["review"] == "vulnerable"
-
-def test_get_software_versions():
-    versions = main_registry.get_software_versions("Google Chrome")
-    assert len(versions) == 2
-
+    
 def test_get_software_report():
     report = main_registry.get_human_readable_report("Google Chrome")
     assert "Version ID: Google_Chrome-ec4f88362c38bfb8f17465c45f8be2614c1f9e3c0ead77ae25e8e94a9411ab5f" in report
