@@ -9,6 +9,8 @@ Detection path:
   2. __InstanceCreationEvent WITHIN 1 (no admin) – ~1 s polling latency.
 """
 
+from wsgiref.simple_server import software_version
+
 import pythoncom
 import win32com.client
 from PyQt5.QtCore import QThread, pyqtSignal
@@ -95,12 +97,27 @@ class ProcessMonitor(QThread):
                 except Exception:
                     continue
 
+                # Calculate version_id (must match server's implementation)
+                program_name = pe_data.get("file_properties", {}).get("StringFileInfo", {}).get("ProductName")
+
+                signed = False
+                if pe_data.get("signatures") and len(pe_data["signatures"]) > 0:
+                    signed = True
+
+                if signed:
+                    software_version_hash = pe_data.get("signatures", [{}])[0].get("hash")
+                    software_version_id = program_name.replace(" ", "_")  + "-" + software_version_hash
+                else:
+                    software_version_id = "unsigned"
+                    software_version_hash = "unsigned"
+
                 pe_data["_meta"] = {
                     "pid": pid,
                     "path": path,
                     "process_name": path.split("\\")[-1],
                     "using_etw": using_etw,
-                    "program_name": pe_data.get("file_properties", {}).get("StringFileInfo", {}).get("ProductName"),
+                    "program_name": program_name,
+                    "software_version_id": software_version_id,
                     "report": "",
                     "reviews": [],
                 }

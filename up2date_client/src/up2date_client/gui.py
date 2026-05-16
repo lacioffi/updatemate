@@ -23,7 +23,7 @@ _COLS = ["Time", "PID", "Program Name", "Process Name", "Company", "Version", "S
 _GREEN = QColor("#2ecc71")
 _RED   = QColor("#e74c3c")
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 
 class HealthCheckWorker(QThread):
     status_changed = pyqtSignal(bool)
@@ -49,23 +49,43 @@ class ProcessGetDetailsWorker(QThread):
         details_ready = pyqtSignal(dict)
         error_occurred = pyqtSignal(str)
     
-        def __init__(self, program_name: str, api_client: APIClient):
+        def __init__(self, program_name: str, version_id: str, api_client: APIClient):
             super().__init__()
             self.program_name = program_name
+            self.version_id = version_id
             self._api_client = api_client
-            self.process_details = {"report":"", "reviews": []}           
+            self.process_details = {"report":"", "reviews": [], "versions": []}           
     
         def run(self):
             try:
                 response = self._api_client.get_software_report(self.program_name)
                 report = response.get("report", {})
+                logging.info(f"(1) {self.program_name} - Getting report from server")
                 if report:
-                    logging.debug(f"Received report for {self.program_name} (non-null)")
+                    logging.info(f"(2) {self.program_name} - Fetched report (non-null)")
                 else:
-                    logging.debug(f"No report found for {self.program_name}")
+                    logging.info(f"(2) {self.program_name} - No report found")
                 self.process_details["report"] = report
 
-                #TODO: fetch reviews when endpoint is ready
+                #Get reviews for existing version:
+                logging.info(f"(3) {self.program_name} - Getting reviews for version {self.version_id}")
+                reviews = self._api_client.get_version_reviews(self.version_id).get("reviews", [])
+                try:
+                    reviews = json.loads(reviews) if isinstance(reviews, str) else reviews
+                    logging.info(f"(4) {self.program_name} - Fetched reviews for version {self.version_id}")
+                except Exception as e: 
+                    logging.info(f"(4) {self.program_name} - No reviews found for version {self.version_id}")
+                self.process_details["reviews"] = reviews
+
+                #Get known versions list:
+                logging.info(f"(5) {self.program_name} - Getting known versions for {self.program_name}")
+                versions = self._api_client.get_software_versions(self.program_name).get("versions", [])
+                if versions:
+                    logging.info(f"(6) {self.program_name} - Fetched known versions for {self.program_name}")
+                else:
+                    logging.info(f"(6) {self.program_name} - No known versions found for {self.program_name}")
+                self.process_details["versions"] = versions 
+
                 self.details_ready.emit(self.process_details)
 
             except Exception as exc:
@@ -174,6 +194,11 @@ class MainWindow(QMainWindow):
         self._reviews_text.setFont(QFont("Courier New", 9))
         tabs.addTab(self._reviews_text, "Reviews")
 
+        self._versions_text = QTextEdit()
+        self._versions_text.setReadOnly(True)
+        self._versions_text.setFont(QFont("Courier New", 9))
+        tabs.addTab(self._versions_text, "Known Versions")
+
         splitter.addWidget(tabs)
         splitter.setSizes([400, 300])
 
@@ -199,6 +224,7 @@ class MainWindow(QMainWindow):
         self._raw.clear()
         self._report_text.clear()
         self._reviews_text.clear()
+        self._versions_text.clear()
 
     def _set_server_status(self, is_online: bool):
         color = _GREEN if is_online else _RED
@@ -225,6 +251,7 @@ class MainWindow(QMainWindow):
         company_name = sfi.get("CompanyName", "") or ""
         file_version = fp.get("FileVersion", "") or ""
         program_name = sfi.get("ProductName", "") or ""
+        version_id = pe_data["_meta"].get("software_version_id", "")
 
         for col, (text, color) in enumerate([
             (datetime.now().strftime("%H:%M:%S"), None),
@@ -244,8 +271,7 @@ class MainWindow(QMainWindow):
         )
 
         if sigs and program_name:
-            logging.debug(f"Fetching report for {program_name}...")
-            getDetailsWorker = ProcessGetDetailsWorker(program_name, self._api_client)
+            getDetailsWorker = ProcessGetDetailsWorker(program_name, version_id, self._api_client)
             self._workers.append(getDetailsWorker)  # keep reference to prevent GC
             self._workers[-1].details_ready.connect(lambda x: self._update_program_with_details(details=x, table_row=row, record_index=len(self._records) - 1))
             self._workers[-1].start()
@@ -253,14 +279,24 @@ class MainWindow(QMainWindow):
     def _on_error(self, msg: str):
         self.statusBar().showMessage(f"Error: {msg}")
         self._start_btn.setText("Start Monitoring")
+        logging.error(f"Process monitor error: {msg}")
 
     # ------------------------------------------------------------------
 
     def _update_program_with_details(self, details: dict, table_row: int, record_index: int):
+        logging.info(f"(7) {self._records[record_index]['_meta']['program_name']} - Updating UI with fetched details")
         self._records[record_index]["_meta"]["report"] = details["report"]
+        self._records[record_index]["_meta"]["versions"] = details.get("versions", [])
+        self._records[record_index]["_meta"]["reviews"] = details.get("reviews", [])
+
         if details["report"]:
             self._table.setItem(table_row, len(_COLS) - 2, _item("YES"))
-        self._table.setItem(table_row, len(_COLS) - 1, _item("This will be filled with the number of reviews..."))
+
+        version_text = (
+            ", ".join(str(v) for v in details.get("versions", [])[:3]) + ("..." if len(details.get("versions", [])) > 3 else "")
+            if details.get("versions") else "N/A"
+        )
+        self._table.setItem(table_row, len(_COLS) - 1, _item(version_text))
 
     def _on_select(self):
         rows = self._table.selectionModel().selectedRows()
@@ -310,7 +346,32 @@ class MainWindow(QMainWindow):
         else:
             self._report_text.setPlainText("No report data available")
 
-        self._reviews_text.setPlainText("(Reviews feature coming soon)")
+        reviews = pe_data.get("_meta").get("reviews", [])
+        if reviews:
+            if isinstance(reviews, list):
+                self._reviews_text.setPlainText("\n".join(str(review) for review in reviews))
+            else:
+                self._reviews_text.setPlainText(str(reviews))
+        else:
+            self._reviews_text.setPlainText("No review data available")
+
+
+        versions = pe_data.get("_meta", {}).get("versions", [])
+        if versions:
+            version_lines = []
+            for version in versions:
+                try:
+                    v = json.loads(version) if isinstance(version, str) else version
+                    first_seen = v.get("first_seen", "N/A")
+                    version_id = v.get("software_version_id", "N/A")
+                    product_version = v.get("file_properties", {}).get("StringFileInfo", {}).get("ProductVersion", "N/A")
+                    version_lines.append(f"Version ID: {version_id}\nFirst Seen: {first_seen}\nProduct Version: {product_version}\n")
+                except:
+                    version_lines.append(f"Error parsing version data\n")
+            self._versions_text.setPlainText("\n".join(version_lines))
+        else:
+            self._versions_text.setPlainText("No known versions available")
+
 
     # ------------------------------------------------------------------
 

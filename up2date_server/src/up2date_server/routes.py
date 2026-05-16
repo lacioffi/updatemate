@@ -46,7 +46,7 @@ def add_software_review(version_id):
     return jsonify({"message": "Review added successfully"}), 201
 
 @api_bp.route('/software/<software_name>', methods=['GET'])
-def get_software_reviews(software_name):
+def get_software_report(software_name):
     try:
         report = main_registry.get_human_readable_report(software_name)
     except Exception as e:
