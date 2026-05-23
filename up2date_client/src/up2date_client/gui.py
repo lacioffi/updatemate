@@ -69,22 +69,24 @@ class ProcessGetDetailsWorker(QThread):
 
                 #Get reviews for existing version:
                 logging.info(f"(3) {self.program_name} - Getting reviews for version {self.version_id}")
-                reviews = self._api_client.get_version_reviews(self.version_id).get("reviews", [])
+                reviews_response = self._api_client.get_version_reviews(self.version_id)
+                reviews = reviews_response.get("reviews", [])
                 try:
                     reviews = json.loads(reviews) if isinstance(reviews, str) else reviews
                     logging.info(f"(4) {self.program_name} - Fetched reviews for version {self.version_id}")
-                except Exception as e: 
+                except Exception as e:
                     logging.info(f"(4) {self.program_name} - No reviews found for version {self.version_id}")
                 self.process_details["reviews"] = reviews
 
                 #Get known versions list:
                 logging.info(f"(5) {self.program_name} - Getting known versions for {self.program_name}")
-                versions = self._api_client.get_software_versions(self.program_name).get("versions", [])
+                versions_response = self._api_client.get_software_versions(self.program_name)
+                versions = versions_response.get("versions", [])
                 if versions:
                     logging.info(f"(6) {self.program_name} - Fetched known versions for {self.program_name}")
                 else:
                     logging.info(f"(6) {self.program_name} - No known versions found for {self.program_name}")
-                self.process_details["versions"] = versions 
+                self.process_details["versions"] = versions
 
                 self.details_ready.emit(self.process_details)
 
@@ -240,6 +242,12 @@ class MainWindow(QMainWindow):
         sfi  = fp.get("StringFileInfo") or {}
         sigs = pe_data.get("signatures", [])
 
+        version_id = pe_data["_meta"].get("software_version_id", "")
+
+        if version_id and any(r["_meta"].get("software_version_id") == version_id for r in self._records):
+            logging.info(f"Duplicate software version {version_id} detected, skipping")
+            return
+
         row = self._table.rowCount()
         self._table.insertRow(row)
         self._records.append(pe_data)
@@ -248,10 +256,11 @@ class MainWindow(QMainWindow):
         signed_text = "Yes" if signed else "No"
         signed_col  = _GREEN if signed else _RED
 
+        loading_col = "LOADING..." if signed else ""
+
         company_name = sfi.get("CompanyName", "") or ""
         file_version = fp.get("FileVersion", "") or ""
         program_name = sfi.get("ProductName", "") or ""
-        version_id = pe_data["_meta"].get("software_version_id", "")
 
         for col, (text, color) in enumerate([
             (datetime.now().strftime("%H:%M:%S"), None),
@@ -261,7 +270,8 @@ class MainWindow(QMainWindow):
             (company_name,                        None),
             (file_version,                        None),
             (signed_text,                         signed_col),
-            ("",                                  None),
+            (loading_col,                         None),
+            (loading_col,                         None),
         ]):
             self._table.setItem(row, col, _item(text, color))
 
@@ -273,7 +283,7 @@ class MainWindow(QMainWindow):
         if sigs and program_name:
             getDetailsWorker = ProcessGetDetailsWorker(program_name, version_id, self._api_client)
             self._workers.append(getDetailsWorker)  # keep reference to prevent GC
-            self._workers[-1].details_ready.connect(lambda x: self._update_program_with_details(details=x, table_row=row, record_index=len(self._records) - 1))
+            self._workers[-1].details_ready.connect(lambda x: self._update_program_with_details(details=x, version_id=version_id))
             self._workers[-1].start()
 
     def _on_error(self, msg: str):
@@ -283,20 +293,52 @@ class MainWindow(QMainWindow):
 
     # ------------------------------------------------------------------
 
-    def _update_program_with_details(self, details: dict, table_row: int, record_index: int):
+    def _update_program_with_details(self, details: dict, version_id: str):
+        #Get row for specific version_id:
+        record_index = None
+        for i, record in enumerate(self._records):
+            if record["_meta"].get("software_version_id") == version_id:
+                record_index = i
+                break
+
+        if record_index is None:
+            logging.warning(f"Record with version_id {version_id} not found")
+            return
+
+        table_row = record_index
         logging.info(f"(7) {self._records[record_index]['_meta']['program_name']} - Updating UI with fetched details")
+
+        #Update the record with fetched details:
         self._records[record_index]["_meta"]["report"] = details["report"]
         self._records[record_index]["_meta"]["versions"] = details.get("versions", [])
         self._records[record_index]["_meta"]["reviews"] = details.get("reviews", [])
 
-        if details["report"]:
-            self._table.setItem(table_row, len(_COLS) - 2, _item("YES"))
+        #Check if version was seen before to update "Known Version" column:
+        version_seen = False
+        for version in details.get("versions", []):
+            try:
+                v = json.loads(version) if isinstance(version, str) else version
+                if v.get("software_version_id") == version_id:
+                    version_seen = True
+                    break
+            except:
+                continue
 
-        version_text = (
-            ", ".join(str(v) for v in details.get("versions", [])[:3]) + ("..." if len(details.get("versions", [])) > 3 else "")
-            if details.get("versions") else "N/A"
-        )
-        self._table.setItem(table_row, len(_COLS) - 1, _item(version_text))
+        if version_seen:
+            self._table.setItem(table_row, len(_COLS) - 2, _item("YES", _GREEN))
+        else:
+            self._table.setItem(table_row, len(_COLS) - 2, _item("NO", _RED))
+
+        #Check number of reviews to update "Reviews" column:   
+        reviews = details.get("reviews", [])
+        if reviews:
+            if isinstance(reviews, list):
+                self._table.setItem(table_row, len(_COLS) - 1, _item(str(len(reviews))))
+            else:
+                self._table.setItem(table_row, len(_COLS) - 1, _item("0"))
+        else:
+            self._table.setItem(table_row, len(_COLS) - 1, _item("0"))
+
 
     def _on_select(self):
         rows = self._table.selectionModel().selectedRows()
@@ -367,7 +409,7 @@ class MainWindow(QMainWindow):
                     product_version = v.get("file_properties", {}).get("StringFileInfo", {}).get("ProductVersion", "N/A")
                     version_lines.append(f"Version ID: {version_id}\nFirst Seen: {first_seen}\nProduct Version: {product_version}\n")
                 except:
-                    version_lines.append(f"Error parsing version data\n")
+                    version_lines = [versions]
             self._versions_text.setPlainText("\n".join(version_lines))
         else:
             self._versions_text.setPlainText("No known versions available")

@@ -108,7 +108,7 @@ class ProcessMonitor(QThread):
                     software_version_hash = pe_data.get("signatures", [{}])[0].get("hash")
                     software_version_id = program_name.replace(" ", "_")  + "-" + software_version_hash
                 else:
-                    software_version_id = "unsigned"
+                    software_version_id =  program_name.replace(" ", "_")  + "-" + pe_data.get("file_properties", {}).get("FileVersion", "").replace(" ", "_") 
                     software_version_hash = "unsigned"
 
                 pe_data["_meta"] = {
