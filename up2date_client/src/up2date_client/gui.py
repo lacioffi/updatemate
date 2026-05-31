@@ -9,6 +9,7 @@ from PyQt5.QtWidgets import (
     QPushButton, QTableWidget, QTableWidgetItem, QHeaderView,
     QTabWidget, QTreeWidget, QTreeWidgetItem,
     QTextEdit, QAbstractItemView, QLabel,
+    QLineEdit, QComboBox,
 )
 from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal
 from PyQt5.QtGui import QColor, QFont
@@ -18,7 +19,7 @@ from up2date_client.process_monitor import ProcessMonitor
 from up2date_client.api_client import APIClient
 
 
-_COLS = ["Time", "PID", "Program Name", "Process Name", "Company", "Version", "Signed", "Known Version", "Reviews"]
+_COLS = ["Time", "PID", "Program Name", "Process Name", "Company", "Version", "Signed", "Known Version", "Reviews", "Heuristic Results"]
 
 _GREEN = QColor("#2ecc71")
 _RED   = QColor("#e74c3c")
@@ -201,6 +202,46 @@ class MainWindow(QMainWindow):
         self._versions_text.setFont(QFont("Courier New", 9))
         tabs.addTab(self._versions_text, "Known Versions")
 
+        self._heuristic_text = QTextEdit()
+        self._heuristic_text.setReadOnly(True)
+        self._heuristic_text.setFont(QFont("Courier New", 9))
+        tabs.addTab(self._heuristic_text, "Heuristic Analysis")
+
+        # Submit Review tab
+        self._submit_review_widget = QWidget()
+        submit_layout = QVBoxLayout(self._submit_review_widget)
+
+        reviewer_layout = QHBoxLayout()
+        self._reviewer_label = QLabel("Reviewer:")
+        reviewer_layout.addWidget(self._reviewer_label)
+        self._reviewer_input = QLineEdit()
+        reviewer_layout.addWidget(self._reviewer_input)
+        submit_layout.addLayout(reviewer_layout)
+
+        comment_layout = QHBoxLayout()
+        self._comment_label = QLabel("Comment:")
+        comment_layout.addWidget(self._comment_label)
+        self._comment_input = QTextEdit()
+        self._comment_input.setMaximumHeight(80)
+        comment_layout.addWidget(self._comment_input)
+        submit_layout.addLayout(comment_layout)
+
+        review_layout = QHBoxLayout()
+        self._review_label = QLabel("Review:")
+        review_layout.addWidget(self._review_label)
+        self._review_dropdown = QComboBox()
+        self._review_dropdown.addItems(["ok", "vulnerable", "malicious", "degraded"])
+        review_layout.addWidget(self._review_dropdown)
+        review_layout.addStretch()
+        submit_layout.addLayout(review_layout)
+
+        self._submit_btn = QPushButton("Submit Review")
+        self._submit_btn.clicked.connect(self._submit_review)
+        submit_layout.addWidget(self._submit_btn)
+        submit_layout.addStretch()
+
+        tabs.addTab(self._submit_review_widget, "Submit Review")
+
         splitter.addWidget(tabs)
         splitter.setSizes([400, 300])
 
@@ -272,6 +313,7 @@ class MainWindow(QMainWindow):
             (signed_text,                         signed_col),
             (loading_col,                         None),
             (loading_col,                         None),
+            (loading_col,                         None),
         ]):
             self._table.setItem(row, col, _item(text, color))
 
@@ -325,19 +367,19 @@ class MainWindow(QMainWindow):
                 continue
 
         if version_seen:
-            self._table.setItem(table_row, len(_COLS) - 2, _item("YES", _GREEN))
+            self._table.setItem(table_row, len(_COLS) - 3, _item("YES", _GREEN))
         else:
-            self._table.setItem(table_row, len(_COLS) - 2, _item("NO", _RED))
+            self._table.setItem(table_row, len(_COLS) - 3, _item("NO", _RED))
 
         #Check number of reviews to update "Reviews" column:   
         reviews = details.get("reviews", [])
         if reviews:
             if isinstance(reviews, list):
-                self._table.setItem(table_row, len(_COLS) - 1, _item(str(len(reviews))))
+                self._table.setItem(table_row, len(_COLS) - 2, _item(str(len(reviews))))
             else:
-                self._table.setItem(table_row, len(_COLS) - 1, _item("0"))
+                self._table.setItem(table_row, len(_COLS) - 2, _item("0"))
         else:
-            self._table.setItem(table_row, len(_COLS) - 1, _item("0"))
+            self._table.setItem(table_row, len(_COLS) - 2, _item("0"))
 
 
     def _on_select(self):
@@ -391,7 +433,18 @@ class MainWindow(QMainWindow):
         reviews = pe_data.get("_meta").get("reviews", [])
         if reviews:
             if isinstance(reviews, list):
-                self._reviews_text.setPlainText("\n".join(str(review) for review in reviews))
+                review_lines = []
+                for review in reviews:
+                    try:
+                        r = json.loads(review) if isinstance(review, str) else review
+                        reviewer = r.get("reviewer", "N/A")
+                        comment = r.get("comment", "N/A")
+                        review_value = r.get("review", "N/A")
+                        time_received = r.get("time_received", "N/A")
+                        review_lines.append(f"Reviewer: {reviewer}\nComment: {comment}\nReview: {review_value}\nTime Received: {time_received}\n---\n")
+                    except:
+                        review_lines.append(str(review))
+                self._reviews_text.setPlainText("\n".join(review_lines))
             else:
                 self._reviews_text.setPlainText(str(reviews))
         else:
@@ -414,6 +467,49 @@ class MainWindow(QMainWindow):
         else:
             self._versions_text.setPlainText("No known versions available")
 
+    def _submit_review(self):
+        rows = self._table.selectionModel().selectedRows()
+        if not rows:
+            self.statusBar().showMessage("Error: No software selected")
+            return
+
+        record = self._records[rows[0].row()]
+        version_id = record["_meta"].get("software_version_id", "")
+
+        if not version_id:
+            self.statusBar().showMessage("Error: No version ID found")
+            return
+
+        reviewer = self._reviewer_input.text().strip()
+        comment = self._comment_input.toPlainText().strip()
+        review = self._review_dropdown.currentText()
+
+        if not reviewer or not comment:
+            self.statusBar().showMessage("Error: Reviewer and comment are required")
+            return
+
+        try:
+            #Also submit the software version data if not already present, to ensure the review is linked to a known version in the system:
+            version_data = {
+                "file_properties": record.get("file_properties", {}),
+                "signatures": record.get("signatures", [])
+            }
+            self._api_client.add_software_version(json.dumps(version_data))
+
+            review_data = {
+                "reviewer": reviewer,
+                "comment": comment,
+                "review": review
+            }
+            response = self._api_client.add_version_review(version_id, json.dumps(review_data))
+            self._reviewer_input.clear()
+            self._comment_input.clear()
+            self._review_dropdown.setCurrentIndex(0)
+            self.statusBar().showMessage(f"Review submitted successfully")
+            logging.info(f"Review submitted for version {version_id}: {response}")
+        except Exception as e:
+            self.statusBar().showMessage(f"Error submitting review: {str(e)}")
+            logging.error(f"Error submitting review: {e}")
 
     # ------------------------------------------------------------------
 

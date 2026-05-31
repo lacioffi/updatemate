@@ -18,6 +18,8 @@ class APIClient:
             json=version_data,
             timeout=self.timeout
         )
+        if r.status_code == 400:
+            print(f"Error adding version: {r.text}")
         r.raise_for_status()
         return r.json()
 
