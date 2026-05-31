@@ -1,9 +1,11 @@
+from copyreg import pickle
 import json
 import os
 from pymerkle import SqliteTree
 from datetime import datetime
 from up2date_server.classes import SoftwareVersion, SoftwareReview
 import logging
+from pathlib import Path
 
 class SoftwareRegistry:
     def __init__(self, path: str):
@@ -134,3 +136,27 @@ class SoftwareRegistry:
             return f"{software_version_id} not found in system. You must first upload the version's data before submitting a comment."
 
         return reviews
+    
+    def get_root_audit(self):
+        """Get the current state of the Master Tree, which contains all registered software products. This is the main audit result that can be publicly verified."""
+        with SqliteTree(self.path + f"master_tree.db") as master_tree:
+            root_hash = master_tree.get_state().hex()
+            return {"root_hash": root_hash, "registered_software_count": master_tree.get_size(), "tree": Path(self.path + f"master_tree.db").read_bytes().hex()}
+        
+    def get_software_audit(self, software_name):
+        """Get the audit result for a specific software product."""
+        if not os.path.isfile(self.path + f"{software_name}_tree.db"):
+            return f"Product {software_name} not found."
+
+        with SqliteTree(self.path + f"{software_name}_tree.db") as software_tree:
+            root_hash = software_tree.get_state().hex()
+            return {"root_hash": root_hash, "versions_count": software_tree.get_size(), "tree": Path(self.path + f"{software_name}_tree.db").read_bytes().hex()}
+        
+    def get_software_version_audit(self, software_version_id):
+        """Get the audit result for a specific software version."""
+        if not os.path.isfile(self.path + f"{software_version_id}_reviews_tree.db"):
+            return f"{software_version_id} not found in system. You must first upload the version's data before submitting a comment."
+
+        with SqliteTree(self.path + f"{software_version_id}_reviews_tree.db") as reviews_tree:
+            root_hash = reviews_tree.get_state().hex()
+            return {"root_hash": root_hash, "reviews_count": reviews_tree.get_size(), "tree": Path(self.path + f"{software_version_id}_reviews_tree.db").read_bytes().hex()}

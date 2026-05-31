@@ -60,3 +60,28 @@ def get_software_versions(software_name):
     except Exception as e:
         return jsonify({"error": str(e)}), 400
     return jsonify({"versions": versions}), 200
+
+### Auditor methods
+@api_bp.route('/audit', methods=['GET'])
+def get_audit_result():
+    try:
+        result = main_registry.get_root_audit()
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"result": result}), 200
+
+@api_bp.route('/audit/software/<software_name>', methods=['GET'])
+def get_audit_result_by_software_name(software_name):
+    try:
+        result = main_registry.get_software_audit(software_name)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"result": result}), 200
+
+@api_bp.route('/audit/software/version/<version_id>', methods=['GET'])
+def get_audit_result_by_software_version(version_id):
+    try:
+        result = main_registry.get_software_version_audit(version_id)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"result": result}), 200
