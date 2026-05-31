@@ -3,6 +3,7 @@ import os
 from pymerkle import SqliteTree
 from datetime import datetime
 from up2date_server.classes import SoftwareVersion, SoftwareReview
+import logging
 
 class SoftwareRegistry:
     def __init__(self, path: str):
@@ -25,18 +26,20 @@ class SoftwareRegistry:
         # Consistent serialization for the audit log
         software_version_hash = software_version.signatures[0].hash
         software_version_id = software_name.replace(" ", "_")  + "-" + software_version_hash
-        software_version.version_id = software_version_id
+        software_version.software_version_id = software_version_id
 
         software_data = json.dumps(software_version.__dict__, default=lambda o: o.__dict__, sort_keys=True) # Sort keys for consistent hashing
 
-        if not self.master_tree.get_entry(software_name.encode('utf-8')): # Check if software is already registered in Master Tree
-            # REGISTER the new tree in the Master Tree, using the software's name
-            self.master_tree.append_entry(software_name.encode('utf-8')) 
-            #print(f"[REGISTERED] {software_name} added to Master Tree.")
+        with SqliteTree(self.path + f"master_tree.db") as master_tree:
+            if not master_tree.get_entry(software_name.encode('utf-8')): # Check if software is already registered in Master Tree
+                # REGISTER the new tree in the Master Tree, using the software's name
+                master_tree.append_entry(software_name.encode('utf-8')) 
+                print(f"[REGISTERED] {software_name} added to Master Tree.")
         
 
         with SqliteTree(self.path + f"{software_name}_tree.db") as software_tree:
             software_tree.append_entry(software_data.encode('utf-8')) # Create tree for software if needed. Add version
+            print(f"[ADDED] Version {software_version_id} added to {software_name}'s tree.")
 
         if not  os.path.isfile(self.path + f"{software_version_id}_reviews_tree.db"):
             with SqliteTree(self.path + f"{software_version_id}_reviews_tree.db") as reviews_tree:
@@ -114,7 +117,7 @@ class SoftwareRegistry:
                 leaf = software_tree.get_entry(i)
                 version_data.append(json.loads(leaf))
         
-        print(version_data)
+        #print(version_data)
         return version_data
     
     def get_version_reviews(self, software_version_id):

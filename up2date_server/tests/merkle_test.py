@@ -50,7 +50,7 @@ for file_path in json_files:
 def test_get_software_versions():
     versions = main_registry.get_software_versions("Google Chrome")
     print(versions)
-    assert len(versions) == 2
+    assert len(versions) == 3
     assert versions[0]["signatures"][0]["hash"] == "676b876b97ce6a80327efa7ff2fd61c885a7084879ebf7655f3d3aa361775429"
     assert versions[1]["signatures"][0]["hash"] == "ec4f88362c38bfb8f17465c45f8be2614c1f9e3c0ead77ae25e8e94a9411ab5f"
 
@@ -66,6 +66,7 @@ def test_software_reviews():
     }
     review = SoftwareReview(review_data)
     main_registry.add_version_review("Google_Chrome-676b876b97ce6a80327efa7ff2fd61c885a7084879ebf7655f3d3aa361775429", review)
+    main_registry.add_version_review("Google_Chrome-82ad9ce8534e6de68cebc14699b28509c8c85fda36100d09ab79919c16c217f7", review)
     reviews = main_registry.get_version_reviews("Google_Chrome-676b876b97ce6a80327efa7ff2fd61c885a7084879ebf7655f3d3aa361775429")
     assert len(reviews) == 1
     assert reviews[0]["review"] == "vulnerable"

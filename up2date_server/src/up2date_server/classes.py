@@ -36,11 +36,16 @@ class SoftwareVersion:
         ]
 
         self.first_seen: Optional[str] = None
-        self.version_id: Optional[str] = None
+        self.software_version_id: Optional[str] = None
 
 class SoftwareReview:
+    VALID_REVIEWS = {"ok", "vulnerable", "malicious", "degraded"}
+
     def __init__(self, data: dict):
         self.reviewer: str = data["reviewer"]
         self.comment: str = data["comment"]
-        self.review: str = data["review"]
+        review = data["review"]
+        if review not in self.VALID_REVIEWS:
+            raise ValueError(f"Invalid review value: {review}. Must be one of {self.VALID_REVIEWS}")
+        self.review: str = review
         self.time_received: Optional[str] = None
