@@ -375,7 +375,16 @@ class MainWindow(QMainWindow):
         reviews = details.get("reviews", [])
         if reviews:
             if isinstance(reviews, list):
-                self._table.setItem(table_row, len(_COLS) - 2, _item(str(len(reviews))))
+                good_reviews = 0
+                bad_reviews = 0
+                for review in reviews:
+                    r = json.loads(review) if isinstance(review, str) else review    
+                    review_value = r.get("review", "N/A")
+                    if review_value == "ok":
+                        good_reviews += 1
+                    else:
+                        bad_reviews += 1
+                self._table.setItem(table_row, len(_COLS) - 2, _item(f"{good_reviews} OK/{len(reviews)}"))
             else:
                 self._table.setItem(table_row, len(_COLS) - 2, _item("0"))
         else:
