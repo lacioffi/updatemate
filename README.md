@@ -1,21 +1,16 @@
 # up2date
 Public, community-driven update transparency solution
 
-# Usage
-Simply docker-compose up the entire thing.
-
-Alternatively, you can spin up the server and the client individually. See text below for more info.
-
-# Testing
-Unit tests: cd into the specific folder (client or server) and run `poetry install`, then `poetry run pytest`.
-
-## Server tests
+# Running the Server
 To spin up the server locally, cd into the server folder and run `poetry install`, then `poetry run up2date_server`.
 To run in hot reload mode, just set the environment variable `DEBUG` to `True`
 
-## Client tests
+# Running the Client
 To run the client, cd into the client folder and run `poetry install`, then `poetry run up2date_client`
 Note: you may have to install PyQt5 manually: `poetry run pip install pyqt5`, `poetry run pip install pyqt5-qt5`
+
+# Testing
+Unit tests: cd into the specific folder (client or server) and run `poetry install`, then `poetry run pytest`.
 
 # General architecture
 ## Client
