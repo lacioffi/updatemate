@@ -17,6 +17,7 @@ from PyQt5.QtGui import QColor, QFont
 from up2date_client.file_manager import analyze_pe
 from up2date_client.process_monitor import ProcessMonitor
 from up2date_client.api_client import APIClient
+from up2date_client import heuristics
 
 
 _COLS = ["Time", "PID", "Program Name", "Process Name", "Company", "Version", "Signed", "Known Version", "Reviews", "Heuristic Results"]
@@ -95,6 +96,59 @@ class ProcessGetDetailsWorker(QThread):
                 logging.error(f"Error fetching software report for {self.program_name}: {exc}")
                 self.error_occurred.emit(f"Failed to retrieve software report: {exc}")
 
+class ProcessHeuristicsWorker(QThread):
+    details_ready = pyqtSignal(dict)
+    error_occurred = pyqtSignal(str)
+
+    def __init__(self, program_data: dict):
+        super().__init__()
+        self.program_data = program_data
+        self.heuristic_results = {}
+
+    def run(self):
+        try:
+            program_name = self.program_data["_meta"].get("program_name", "")
+            logging.info(f"Running heuristics for {program_name}")
+
+            reviews = self.program_data.get("_meta", {}).get("reviews", [])
+            versions = self.program_data.get("_meta", {}).get("versions", [])
+            fp = self.program_data.get("file_properties", {})
+            current_file_version = fp.get("FileVersion", "") or ""
+
+            results = {}
+            ok_count = 0
+            bad_count = 0
+
+            for func_name in ["check_freeze_attack", "check_replay_attack", "check_widespread_malware", "check_targeted_malware"]:
+                try:
+                    func = getattr(heuristics, func_name)
+                    if func_name == "check_freeze_attack":
+                        status, comment = func(reviews, versions, current_file_version)
+                    else:
+                        status, comment = func(reviews)
+                    results[func_name] = {"status": status, "comment": comment}
+                    if status == "OK":
+                        ok_count += 1
+                    elif status == "BAD":
+                        bad_count += 1
+                except Exception as e:
+                    logging.error(f"Error running heuristic {func_name}: {e}")
+                    results[func_name] = {"status": "ERROR", "comment": str(e)}
+
+            self.heuristic_results = {
+                "ok_count": ok_count,
+                "bad_count": bad_count,
+                "results": results
+            }
+
+            self.details_ready.emit(self.heuristic_results)
+            logging.info(f"Heuristics completed for {program_name}: {ok_count} OK, {bad_count} BAD")
+
+        except Exception as exc:
+            logging.error(f"Error running heuristics: {exc}")
+            self.error_occurred.emit(f"Failed to run heuristics: {exc}")
+
+
 def _item(text: str, color: QColor | None = None) -> QTableWidgetItem:
     it = QTableWidgetItem(str(text))
     it.setFlags(it.flags() & ~Qt.ItemIsEditable)
@@ -102,6 +156,7 @@ def _item(text: str, color: QColor | None = None) -> QTableWidgetItem:
     if color:
         it.setForeground(color)
     return it
+
 
 
 class MainWindow(QMainWindow):
@@ -328,6 +383,9 @@ class MainWindow(QMainWindow):
             self._workers[-1].details_ready.connect(lambda x: self._update_program_with_details(details=x, version_id=version_id))
             self._workers[-1].start()
 
+
+
+
     def _on_error(self, msg: str):
         self.statusBar().showMessage(f"Error: {msg}")
         self._start_btn.setText("Start Monitoring")
@@ -348,7 +406,8 @@ class MainWindow(QMainWindow):
             return
 
         table_row = record_index
-        logging.info(f"(7) {self._records[record_index]['_meta']['program_name']} - Updating UI with fetched details")
+        program_name = self._records[record_index]['_meta'].get('program_name', '')
+        logging.info(f"(7) {program_name} - Updating UI with fetched details")
 
         #Update the record with fetched details:
         self._records[record_index]["_meta"]["report"] = details["report"]
@@ -371,14 +430,14 @@ class MainWindow(QMainWindow):
         else:
             self._table.setItem(table_row, len(_COLS) - 3, _item("NO", _RED))
 
-        #Check number of reviews to update "Reviews" column:   
+        #Check number of reviews to update "Reviews" column:
         reviews = details.get("reviews", [])
         if reviews:
             if isinstance(reviews, list):
                 good_reviews = 0
                 bad_reviews = 0
                 for review in reviews:
-                    r = json.loads(review) if isinstance(review, str) else review    
+                    r = json.loads(review) if isinstance(review, str) else review
                     review_value = r.get("review", "N/A")
                     if review_value == "ok":
                         good_reviews += 1
@@ -390,8 +449,36 @@ class MainWindow(QMainWindow):
         else:
             self._table.setItem(table_row, len(_COLS) - 2, _item("0"))
 
+        heuristicsWorker = ProcessHeuristicsWorker(self._records[record_index])
+        self._workers.append(heuristicsWorker)
+        self._workers[-1].details_ready.connect(lambda x: self._update_program_with_heuristic_details(details=x, version_id=version_id))
+        self._workers[-1].start()
+
+
+
+
+    def _update_program_with_heuristic_details(self, details: dict, version_id: str):
+        record_index = None
+        for i, record in enumerate(self._records):
+            if record["_meta"].get("software_version_id") == version_id:
+                record_index = i
+                break
+
+        if record_index is None:
+            logging.warning(f"Record with version_id {version_id} not found")
+            return
+
+        table_row = record_index
+        ok_count = details.get("ok_count", 0)
+        bad_count = details.get("bad_count", 0)
+
+        self._records[record_index]["_meta"]["heuristic_results"] = details
+
+        heuristic_text = f"{ok_count} OK / {bad_count} BAD"
+        self._table.setItem(table_row, len(_COLS) - 1, _item(heuristic_text))
 
     def _on_select(self):
+
         rows = self._table.selectionModel().selectedRows()
         if rows and rows[0].row() < len(self._records):
             self._show_detail(self._records[rows[0].row()])
@@ -475,6 +562,26 @@ class MainWindow(QMainWindow):
             self._versions_text.setPlainText("\n".join(version_lines))
         else:
             self._versions_text.setPlainText("No known versions available")
+
+        heuristic_results = pe_data.get("_meta", {}).get("heuristic_results", {})
+        if heuristic_results and "results" in heuristic_results:
+            ok_count = heuristic_results.get("ok_count", 0)
+            bad_count = heuristic_results.get("bad_count", 0)
+            results = heuristic_results.get("results", {})
+
+            heuristic_lines = [f"Summary: {ok_count} OK / {bad_count} BAD\n"]
+            heuristic_lines.append("=" * 50)
+
+            for check_name, check_result in results.items():
+                status = check_result.get("status", "UNKNOWN")
+                comment = check_result.get("comment", "")
+                heuristic_lines.append(f"\n{check_name}")
+                heuristic_lines.append(f"Status: {status}")
+                heuristic_lines.append(f"Comment: {comment}")
+
+            self._heuristic_text.setPlainText("\n".join(heuristic_lines))
+        else:
+            self._heuristic_text.setPlainText("No heuristic analysis available")
 
     def _submit_review(self):
         rows = self._table.selectionModel().selectedRows()
