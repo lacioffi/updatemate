@@ -119,10 +119,10 @@ class ProcessHeuristicsWorker(QThread):
             ok_count = 0
             bad_count = 0
 
-            for func_name in ["check_freeze_attack", "check_replay_attack", "check_widespread_malware", "check_targeted_malware"]:
+            for func_name in ["check_freeze_replay_attack", "check_widespread_malware", "check_targeted_malware"]:
                 try:
                     func = getattr(heuristics, func_name)
-                    if func_name == "check_freeze_attack":
+                    if func_name == "check_freeze_replay_attack":
                         status, comment = func(reviews, versions, current_file_version)
                     else:
                         status, comment = func(reviews)

@@ -1,7 +1,7 @@
 import json
 
 
-def check_freeze_attack(reviews, versions: list, current_file_version: str) -> tuple[str, str]:
+def check_freeze_replay_attack(reviews, versions: list, current_file_version: str) -> tuple[str, str]:
     """Detects if user is stuck on older version with bad review while newer versions exist."""
     if not versions or not reviews or not current_file_version or type(reviews) != list:
         return "OK", "Insufficient data for freeze attack check"
@@ -33,18 +33,6 @@ def check_freeze_attack(reviews, versions: list, current_file_version: str) -> t
     if has_newer_version:
         return "BAD", f"Current version {current_file_version} has bad review(s) while newer versions exist"
     return "OK", "Current version has bad review but no newer versions available"
-
-
-
-def check_replay_attack(reviews) -> tuple[str, str]:
-    """Detects if version has unusually low review count (possible targeted attack)."""
-    if not reviews or type(reviews) != list:
-        return "BAD", "No reviews available - possible targeted malware"
-
-    if len(reviews) < 2:
-        return "BAD", f"Very few reviews ({len(reviews)}) - possible targeted malware"
-    return "OK", f"Adequate review count ({len(reviews)} reviews)"
-
 
 def check_widespread_malware(reviews) -> tuple[str, str]:
     """Detects if version has high proportion of negative reviews."""
