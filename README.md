@@ -1,5 +1,6 @@
 # UP2DATE
 Up2Date is a public, community-driven update transparency solution.
+
 It allows you to publish and retrieve information about existing software versions in your machine, and automatically looks for signs of malicious or broken updates.
 
 <img width="1095" height="725" alt="image" src="https://github.com/user-attachments/assets/e469b1e7-52d9-45dd-9224-e20ccbe3af24" />
@@ -9,9 +10,13 @@ Your printer's client auto-updated from v7.5.123 to v7.6.1 when you weren't look
 Is this new version safe? Is it good? Does it still support your old printer? 
 
 Up2Date helps you to detect these changes and answer these questions through:
+
 1 - Continuously monitoring your machine for all launched software and notifying you.
+
 2 - The power of community: you can see what other users with that same version are saying about it, or submit your own review.
-2 - A set of pre-packaged heuristics that run locally and can detect signs of a malicious update, such as a Freeze Attack, a Replay attack, or a targeted malicious version against you.
+
+3 - A set of pre-packaged heuristics that run locally and can detect signs of a malicious update, such as a Freeze Attack, a Replay attack, or a targeted malicious version against you.
+
 
 If you're not very technical, don't worry - it also comes with an AI integration to parse all this nerdy mumbojumbo and let you know if you should run the new version or not.
 
