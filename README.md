@@ -37,7 +37,7 @@ It is basically an API implemented using Flask.
 Merkle data is stored in multiple SQLite databases, stored locally.
 
 A more complete view is seen below:
-<img width="911" height="839" alt="image" src="https://github.com/user-attachments/assets/05b340e9-4f58-4f9b-8376-c91d22c9c7b9" />
+<img width="1012" height="658" alt="image" src="https://github.com/user-attachments/assets/35d52d76-ac2d-4ac2-9f84-2bedd042d854" />
 
 # Running Up2Date
 This is a PoC version. It comes with a client and a server. It only runs on the Windows operating system.
@@ -55,7 +55,9 @@ If you want to start with a fresh database, simply delete the files in that fold
 
 ## Running the Client
 To run the client, cd into the client folder and run `poetry install`, then `poetry run up2date_client`
+
 Note: you may have to install PyQt5 manually: `poetry run pip install pyqt5`, `poetry run pip install pyqt5-qt5`
+
 By default, the client queries the server at `http://localhost:5000`. To change this, set the `SERVER_URL` environment variable to whatever you want.
 
 ## Unit Tests
