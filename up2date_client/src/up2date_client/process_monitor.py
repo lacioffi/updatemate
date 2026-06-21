@@ -97,31 +97,34 @@ class ProcessMonitor(QThread):
                 except Exception:
                     continue
 
-                # Calculate version_id (must match server's implementation)
-                program_name = pe_data.get("file_properties", {}).get("StringFileInfo", {}).get("ProductName")
+                try:
+                    # Calculate version_id (must match server's implementation)
+                    program_name = pe_data.get("file_properties", {}).get("StringFileInfo", {}).get("ProductName")
 
-                signed = False
-                if pe_data.get("signatures") and len(pe_data["signatures"]) > 0:
-                    signed = True
+                    signed = False
+                    if pe_data.get("signatures") and len(pe_data["signatures"]) > 0:
+                        signed = True
 
-                if signed:
-                    software_version_hash = pe_data.get("signatures", [{}])[0].get("hash")
-                    software_version_id = program_name.replace(" ", "_")  + "-" + software_version_hash
-                else:
-                    software_version_id =  program_name.replace(" ", "_")  + "-" + pe_data.get("file_properties", {}).get("FileVersion", "").replace(" ", "_") 
-                    software_version_hash = "unsigned"
+                    if signed:
+                        software_version_hash = pe_data.get("signatures", [{}])[0].get("hash")
+                        software_version_id = program_name.replace(" ", "_")  + "-" + software_version_hash
+                    else:
+                        software_version_id =  program_name.replace(" ", "_")  + "-" + pe_data.get("file_properties", {}).get("FileVersion", "").replace(" ", "_") 
+                        software_version_hash = "unsigned"
 
-                pe_data["_meta"] = {
-                    "pid": pid,
-                    "path": path,
-                    "process_name": path.split("\\")[-1],
-                    "using_etw": using_etw,
-                    "program_name": program_name,
-                    "software_version_id": software_version_id,
-                    "report": "",
-                    "reviews": [],
-                }
-                self.process_ready.emit(pe_data)
+                    pe_data["_meta"] = {
+                        "pid": pid,
+                        "path": path,
+                        "process_name": path.split("\\")[-1],
+                        "using_etw": using_etw,
+                        "program_name": program_name,
+                        "software_version_id": software_version_id,
+                        "report": "",
+                        "reviews": [],
+                    }
+                    self.process_ready.emit(pe_data)
+                except Exception as e:
+                    self.monitor_error.emit(f"Error processing {path}: {e}")
 
         except Exception as exc:
             self.monitor_error.emit(str(exc))
