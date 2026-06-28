@@ -20,9 +20,10 @@ from PyQt5.QtGui import QColor, QFont
 from up2date_client.process_monitor import ProcessMonitor
 from up2date_client.api_client import APIClient
 from up2date_client import heuristics
+from up2date_client import ai_analysis
 
 
-_COLS = ["Time", "Program Name", "Process Name", "Company", "Version", "Signed", "Reviews", "Heuristic Results (OK / BAD / Unknown)"]
+_COLS = ["Time", "Program Name", "Process Name", "Company", "Version", "Signed", "Reviews", "Heuristic Results (OK / BAD / Unknown)", "AI Suggestion"]
 
 _GREEN = QColor("#2ecc71")
 _RED   = QColor("#e74c3c")
@@ -36,10 +37,11 @@ def _load_config():
     try:
         if _CONFIG_PATH.exists():
             config = json.loads(_CONFIG_PATH.read_text(encoding="utf-8"))
-            if not os.environ.get("ABUSECH_API_KEY"):
-                key = config.get("ABUSECH_API_KEY", "")
-                if key:
-                    os.environ["ABUSECH_API_KEY"] = key
+            for env_key in ("ABUSECH_API_KEY", "GEMINI_API_KEY"):
+                if not os.environ.get(env_key):
+                    val = config.get(env_key, "")
+                    if val:
+                        os.environ[env_key] = val
     except Exception:
         pass
 
@@ -58,15 +60,22 @@ class ConfigurationDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Configuration")
-        self.setMinimumWidth(460)
+        self.setMinimumWidth(520)
 
         layout = QVBoxLayout(self)
 
         form = QFormLayout()
-        self._api_key_input = QLineEdit()
-        self._api_key_input.setPlaceholderText("Enter your abuse.ch API key…")
-        self._api_key_input.setText(os.environ.get("ABUSECH_API_KEY", ""))
-        form.addRow("abuse.ch API Key:", self._api_key_input)
+
+        self._abusech_key_input = QLineEdit()
+        self._abusech_key_input.setPlaceholderText("Enter your abuse.ch API key…")
+        self._abusech_key_input.setText(os.environ.get("ABUSECH_API_KEY", ""))
+        form.addRow("abuse.ch API Key:", self._abusech_key_input)
+
+        self._gemini_key_input = QLineEdit()
+        self._gemini_key_input.setPlaceholderText("Enter your Gemini API key…")
+        self._gemini_key_input.setText(os.environ.get("GEMINI_API_KEY", ""))
+        form.addRow("Gemini API Key:", self._gemini_key_input)
+
         layout.addLayout(form)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
@@ -75,7 +84,10 @@ class ConfigurationDialog(QDialog):
         layout.addWidget(buttons)
 
     def api_key(self) -> str:
-        return self._api_key_input.text().strip()
+        return self._abusech_key_input.text().strip()
+
+    def gemini_api_key(self) -> str:
+        return self._gemini_key_input.text().strip()
 
 
 class HealthCheckWorker(QThread):
@@ -211,6 +223,29 @@ class ProcessHeuristicsWorker(QThread):
             self.error_occurred.emit(f"Failed to run heuristics: {exc}")
 
 
+class ProcessAIAnalysisWorker(QThread):
+    details_ready  = pyqtSignal(dict)
+    error_occurred = pyqtSignal(str)
+
+    def __init__(self, program_data: dict, heuristic_results: dict):
+        super().__init__()
+        self.program_data      = program_data
+        self.heuristic_results = heuristic_results
+
+    def run(self):
+        program_name = self.program_data.get("_meta", {}).get("program_name", "")
+        try:
+            logging.info(f"Running AI analysis for {program_name}")
+            verdict, analysis = ai_analysis.analyze_with_gemini(
+                self.program_data, self.heuristic_results
+            )
+            self.details_ready.emit({"verdict": verdict, "analysis": analysis})
+            logging.info(f"AI analysis done for {program_name}: {verdict!r}")
+        except Exception as exc:
+            logging.error(f"AI analysis failed for {program_name}: {exc}")
+            self.error_occurred.emit(str(exc))
+
+
 def _item(text: str, color: QColor | None = None) -> QTableWidgetItem:
     it = QTableWidgetItem(str(text))
     it.setFlags(it.flags() & ~Qt.ItemIsEditable)
@@ -305,6 +340,11 @@ class MainWindow(QMainWindow):
         self._heuristic_text.setFont(QFont("Courier New", 9))
         tabs.addTab(self._heuristic_text, "Heuristic Analysis")
 
+        self._ai_text = QTextEdit()
+        self._ai_text.setReadOnly(True)
+        self._ai_text.setFont(QFont("Courier New", 9))
+        tabs.addTab(self._ai_text, "AI Analysis")
+
         # Submit Review tab
         self._submit_review_widget = QWidget()
         submit_layout = QVBoxLayout(self._submit_review_widget)
@@ -361,6 +401,8 @@ class MainWindow(QMainWindow):
         self._table.setRowCount(0)
         self._records.clear()
         self._reviews_text.clear()
+        self._heuristic_text.clear()
+        self._ai_text.clear()
 
     def _set_server_status(self, is_online: bool):
         color = _GREEN if is_online else _RED
@@ -371,9 +413,11 @@ class MainWindow(QMainWindow):
     def _open_config(self):
         dialog = ConfigurationDialog(self)
         if dialog.exec_() == QDialog.Accepted:
-            key = dialog.api_key()
-            os.environ["ABUSECH_API_KEY"] = key
-            _save_config({"ABUSECH_API_KEY": key})
+            abusech_key = dialog.api_key()
+            gemini_key  = dialog.gemini_api_key()
+            os.environ["ABUSECH_API_KEY"] = abusech_key
+            os.environ["GEMINI_API_KEY"]  = gemini_key
+            _save_config({"ABUSECH_API_KEY": abusech_key, "GEMINI_API_KEY": gemini_key})
             self.statusBar().showMessage("Configuration saved")
 
     # ------------------------------------------------------------------
@@ -411,8 +455,9 @@ class MainWindow(QMainWindow):
             (company_name,                        None),
             (file_version,                        None),
             (signed_text,                         signed_col),
-            (loading_col,                         None),
-            (loading_col,                         None),
+            (loading_col,                         None),  # Reviews
+            (loading_col,                         None),  # Heuristic Results
+            (loading_col,                         None),  # AI Suggestion
         ]):
             self._table.setItem(row, col, _item(text, color))
 
@@ -471,11 +516,11 @@ class MainWindow(QMainWindow):
                         good_reviews += 1
                     else:
                         bad_reviews += 1
-                self._table.setItem(table_row, len(_COLS) - 2, _item(f"{good_reviews} OK/{len(reviews)}"))
+                self._table.setItem(table_row, len(_COLS) - 3, _item(f"{good_reviews} OK/{len(reviews)}"))
             else:
-                self._table.setItem(table_row, len(_COLS) - 2, _item("0"))
+                self._table.setItem(table_row, len(_COLS) - 3, _item("0"))
         else:
-            self._table.setItem(table_row, len(_COLS) - 2, _item("0"))
+            self._table.setItem(table_row, len(_COLS) - 3, _item("0"))
 
         heuristicsWorker = ProcessHeuristicsWorker(self._records[record_index])
         self._workers.append(heuristicsWorker)
@@ -503,7 +548,7 @@ class MainWindow(QMainWindow):
 
         self._records[record_index]["_meta"]["heuristic_results"] = details
 
-        self._table.setItem(table_row, len(_COLS) - 1, _item(""))
+        self._table.setItem(table_row, len(_COLS) - 2, _item(""))
         cell = QLabel(
             f'<span style="color:#2ecc71;">{ok_count}</span>'
             f' / '
@@ -514,7 +559,45 @@ class MainWindow(QMainWindow):
         cell.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
         cell.setContentsMargins(4, 0, 0, 0)
         cell.setStyleSheet("background: transparent;")
-        self._table.setCellWidget(table_row, len(_COLS) - 1, cell)
+        self._table.setCellWidget(table_row, len(_COLS) - 2, cell)
+
+        ai_worker = ProcessAIAnalysisWorker(self._records[record_index], details)
+        self._workers.append(ai_worker)
+        self._workers[-1].details_ready.connect(
+            lambda x, vid=version_id: self._update_program_with_ai_analysis(details=x, version_id=vid)
+        )
+        self._workers[-1].start()
+
+    def _update_program_with_ai_analysis(self, details: dict, version_id: str):
+        record_index = None
+        for i, record in enumerate(self._records):
+            if record["_meta"].get("software_version_id") == version_id:
+                record_index = i
+                break
+
+        if record_index is None:
+            return
+
+        verdict  = details.get("verdict", "")
+        analysis = details.get("analysis", "")
+        self._records[record_index]["_meta"]["ai_analysis"] = details
+
+        verdict_lower = verdict.lower()
+        if any(kw in verdict_lower for kw in ("safe", "good", "clean", "known good", "legitimate")):
+            color = _GREEN
+        elif any(kw in verdict_lower for kw in ("danger", "malicious", "bad", "suspicious", "caution", "risky")):
+            color = _RED
+        else:
+            color = None
+
+        self._table.setItem(record_index, len(_COLS) - 1, _item(verdict or "—", color))
+
+        # If this row is currently selected, refresh the AI Analysis tab
+        rows = self._table.selectionModel().selectedRows()
+        if rows and rows[0].row() == record_index:
+            self._ai_text.setPlainText(
+                f"Verdict: {verdict}\n\n{analysis}" if analysis else verdict
+            )
 
     def _on_select(self):
 
@@ -564,6 +647,16 @@ class MainWindow(QMainWindow):
             self._heuristic_text.setPlainText("\n".join(heuristic_lines))
         else:
             self._heuristic_text.setPlainText("No heuristic analysis available")
+
+        ai_result = pe_data.get("_meta", {}).get("ai_analysis", {})
+        if ai_result:
+            verdict  = ai_result.get("verdict", "")
+            analysis = ai_result.get("analysis", "")
+            self._ai_text.setPlainText(
+                f"Verdict: {verdict}\n\n{analysis}" if analysis else verdict or "No result"
+            )
+        else:
+            self._ai_text.setPlainText("AI analysis not yet available or not configured.")
 
     def _submit_review(self):
         rows = self._table.selectionModel().selectedRows()

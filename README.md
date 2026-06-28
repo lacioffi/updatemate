@@ -60,5 +60,79 @@ Note: you may have to install PyQt5 manually: `poetry run pip install pyqt5`, `p
 
 By default, the client queries the server at `http://localhost:5000`. To change this, set the `SERVER_URL` environment variable to whatever you want.
 
+## Configuring the abuse.ch (MalwareBazaar) Heuristic
+
+One of the client's heuristics checks each executable's SHA-256 hash against [MalwareBazaar](https://bazaar.abuse.ch/), a public database of known malware samples maintained by abuse.ch. This check requires a free API key.
+
+### Getting an API key
+
+1. Go to [https://bazaar.abuse.ch/](https://bazaar.abuse.ch/) and create a free account.
+2. Once logged in, navigate to your account profile to find your personal API key.
+
+### Configuring the key
+
+You have two options:
+
+**Option A — Via the GUI (recommended):**
+1. Launch the client.
+2. Click the **Configuration** button in the toolbar.
+3. Paste your API key into the *abuse.ch API Key* field and click **OK**.
+
+The key is saved to `~/.up2date_config.json` and loaded automatically on every subsequent launch.
+
+**Option B — Via environment variable:**
+
+Set the `ABUSECH_API_KEY` environment variable before launching the client:
+
+```powershell
+# PowerShell
+$env:ABUSECH_API_KEY = "your-api-key-here"
+poetry run up2date_client
+```
+
+```cmd
+:: Command Prompt
+set ABUSECH_API_KEY=your-api-key-here
+poetry run up2date_client
+```
+
+An environment variable set this way takes precedence over any key saved through the GUI.
+
+If no key is configured, the heuristic is silently skipped and reported as *Unknown* in the results.
+
+## Configuring the Gemini AI Integration
+
+The client can send all available binary data (file info, community reviews, heuristic results) to Google's Gemini AI and display a brief safety verdict in the main table plus a detailed explanation in the *AI Analysis* tab.
+
+### Getting a Gemini API key
+
+1. Go to [Google AI Studio](https://aistudio.google.com/) and sign in with your Google account.
+2. Click **Get API key** → **Create API key**.
+
+### Configuring the key
+
+**Option A — Via the GUI (recommended):**
+1. Launch the client.
+2. Click the **Configuration** button in the toolbar.
+3. Paste your key into the *Gemini API Key* field and click **OK**.
+
+The key is saved to `~/.up2date_config.json` and loaded automatically on every subsequent launch.
+
+**Option B — Via environment variable:**
+
+```powershell
+# PowerShell
+$env:GEMINI_API_KEY = "your-api-key-here"
+poetry run up2date_client
+```
+
+```cmd
+:: Command Prompt
+set GEMINI_API_KEY=your-api-key-here
+poetry run up2date_client
+```
+
+If no key is configured, the AI Suggestion column will remain blank and the AI Analysis tab will display a message indicating the key is missing.
+
 ## Unit Tests
 To run unit tests, just `cd` into the specific folder (client or server) and run `poetry install`, then `poetry run pytest`.
