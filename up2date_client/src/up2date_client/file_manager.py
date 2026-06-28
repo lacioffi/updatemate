@@ -1,6 +1,7 @@
 import win32api
 import lief
 import json
+import hashlib
 from pathlib import Path
 
 def get_file_properties(fname):
@@ -74,11 +75,22 @@ def extract_signature_info_lief(file_path):
     
     return pe_signature_data
 
+def compute_sha256(filepath: str) -> str:
+    sha256 = hashlib.sha256()
+    try:
+        with open(filepath, "rb") as f:
+            for chunk in iter(lambda: f.read(65536), b""):
+                sha256.update(chunk)
+        return sha256.hexdigest()
+    except Exception:
+        return ""
+
 def analyze_pe(FILEPATH: str):
     pe_data = {}
 
     pe_data["file_properties"] = get_file_properties(FILEPATH)
     pe_data["signatures"] = extract_signature_info_lief(FILEPATH)
+    pe_data["sha256"] = compute_sha256(FILEPATH)
 
     return pe_data
 

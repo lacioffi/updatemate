@@ -12,6 +12,7 @@ dependencies = [
     "pywin32 (>=311,<312)",
     "lief (>=0.17.6,<0.18.0)",
     "pyqt5-qt (==5.15.2)",
+    "requests (>=2.28.0)",
 ]
 
 [tool.poetry]

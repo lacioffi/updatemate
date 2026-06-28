@@ -1,6 +1,8 @@
 import sys
+import os
 import json
 from datetime import datetime
+from pathlib import Path
 import logging
 
 from PyQt5.QtWidgets import (
@@ -10,22 +12,71 @@ from PyQt5.QtWidgets import (
     QTabWidget, QTreeWidget, QTreeWidgetItem,
     QTextEdit, QAbstractItemView, QLabel,
     QLineEdit, QComboBox,
+    QDialog, QDialogButtonBox, QFormLayout,
 )
-from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal
+from PyQt5.QtCore import Qt, QThread, pyqtSignal
 from PyQt5.QtGui import QColor, QFont
 
-from up2date_client.file_manager import analyze_pe
 from up2date_client.process_monitor import ProcessMonitor
 from up2date_client.api_client import APIClient
 from up2date_client import heuristics
 
 
-_COLS = ["Time", "PID", "Program Name", "Process Name", "Company", "Version", "Signed", "Known Version", "Reviews", "Heuristic Results"]
+_COLS = ["Time", "PID", "Program Name", "Process Name", "Company", "Version", "Signed", "Known Version", "Reviews", "Heuristic Results (OK / BAD / Unknown)"]
 
 _GREEN = QColor("#2ecc71")
 _RED   = QColor("#e74c3c")
 
 logging.basicConfig(level=logging.INFO)
+
+_CONFIG_PATH = Path.home() / ".up2date_config.json"
+
+def _load_config():
+    """Load saved config and inject values into the environment (env var takes precedence)."""
+    try:
+        if _CONFIG_PATH.exists():
+            config = json.loads(_CONFIG_PATH.read_text(encoding="utf-8"))
+            if not os.environ.get("ABUSECH_API_KEY"):
+                key = config.get("ABUSECH_API_KEY", "")
+                if key:
+                    os.environ["ABUSECH_API_KEY"] = key
+    except Exception:
+        pass
+
+def _save_config(updates: dict):
+    try:
+        config = {}
+        if _CONFIG_PATH.exists():
+            config = json.loads(_CONFIG_PATH.read_text(encoding="utf-8"))
+        config.update(updates)
+        _CONFIG_PATH.write_text(json.dumps(config, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+
+
+class ConfigurationDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Configuration")
+        self.setMinimumWidth(460)
+
+        layout = QVBoxLayout(self)
+
+        form = QFormLayout()
+        self._api_key_input = QLineEdit()
+        self._api_key_input.setPlaceholderText("Enter your abuse.ch API key…")
+        self._api_key_input.setText(os.environ.get("ABUSECH_API_KEY", ""))
+        form.addRow("abuse.ch API Key:", self._api_key_input)
+        layout.addLayout(form)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def api_key(self) -> str:
+        return self._api_key_input.text().strip()
+
 
 class HealthCheckWorker(QThread):
     status_changed = pyqtSignal(bool)
@@ -77,7 +128,7 @@ class ProcessGetDetailsWorker(QThread):
                     reviews = json.loads(reviews) if isinstance(reviews, str) else reviews
                     logging.info(f"(4) {self.program_name} - Fetched reviews for version {self.version_id}")
                 except Exception as e:
-                    logging.info(f"(4) {self.program_name} - No reviews found for version {self.version_id}")
+                    logging.info(f"(4) {self.program_name} - No reviews found for version {self.version_id}: {e}")
                 self.process_details["reviews"] = reviews
 
                 #Get known versions list:
@@ -118,12 +169,17 @@ class ProcessHeuristicsWorker(QThread):
             results = {}
             ok_count = 0
             bad_count = 0
+            unknown_count = 0
 
-            for func_name in ["check_freeze_replay_attack", "check_widespread_malware", "check_targeted_malware"]:
+            file_hash = self.program_data.get("sha256", "")
+
+            for func_name in ["check_freeze_replay_attack", "check_widespread_malware", "check_targeted_malware", "check_abusech", "check_circl_hashlookup"]:
                 try:
                     func = getattr(heuristics, func_name)
                     if func_name == "check_freeze_replay_attack":
                         status, comment = func(reviews, versions, current_file_version)
+                    elif func_name in ("check_abusech", "check_circl_hashlookup"):
+                        status, comment = func(file_hash)
                     else:
                         status, comment = func(reviews)
                     results[func_name] = {"status": status, "comment": comment}
@@ -131,6 +187,8 @@ class ProcessHeuristicsWorker(QThread):
                         ok_count += 1
                     elif status == "BAD":
                         bad_count += 1
+                    elif status == "UNKNOWN":
+                        unknown_count += 1
                 except Exception as e:
                     logging.error(f"Error running heuristic {func_name}: {e}")
                     results[func_name] = {"status": "ERROR", "comment": str(e)}
@@ -138,6 +196,7 @@ class ProcessHeuristicsWorker(QThread):
             self.heuristic_results = {
                 "ok_count": ok_count,
                 "bad_count": bad_count,
+                "unknown_count": unknown_count,
                 "results": results
             }
 
@@ -179,6 +238,7 @@ class MainWindow(QMainWindow):
         self._workers = []
 
         self._records: list[dict] = []
+        _load_config()
         self._build_ui()
 
     # ------------------------------------------------------------------
@@ -203,8 +263,13 @@ class MainWindow(QMainWindow):
         self._server_status_label.setFixedWidth(200)
         self._set_server_status(False)
 
+        config_btn = QPushButton("Configuration")
+        config_btn.setFixedWidth(110)
+        config_btn.clicked.connect(self._open_config)
+
         bar.addWidget(self._server_status_label)
         bar.addStretch()
+        bar.addWidget(config_btn)
         bar.addWidget(clear_btn)
         bar.addWidget(self._start_btn)
         root.addLayout(bar)
@@ -329,6 +394,14 @@ class MainWindow(QMainWindow):
         status = "Online" if is_online else "Offline"
         self._server_status_label.setText(f"Server: {status}")
         self._server_status_label.setStyleSheet(f"color: {color.name()};")
+
+    def _open_config(self):
+        dialog = ConfigurationDialog(self)
+        if dialog.exec_() == QDialog.Accepted:
+            key = dialog.api_key()
+            os.environ["ABUSECH_API_KEY"] = key
+            _save_config({"ABUSECH_API_KEY": key})
+            self.statusBar().showMessage("Configuration saved")
 
     # ------------------------------------------------------------------
 
@@ -469,13 +542,24 @@ class MainWindow(QMainWindow):
             return
 
         table_row = record_index
-        ok_count = details.get("ok_count", 0)
-        bad_count = details.get("bad_count", 0)
+        ok_count      = details.get("ok_count", 0)
+        bad_count     = details.get("bad_count", 0)
+        unknown_count = details.get("unknown_count", 0)
 
         self._records[record_index]["_meta"]["heuristic_results"] = details
 
-        heuristic_text = f"{ok_count} OK / {bad_count} BAD"
-        self._table.setItem(table_row, len(_COLS) - 1, _item(heuristic_text))
+        self._table.setItem(table_row, len(_COLS) - 1, _item(""))
+        cell = QLabel(
+            f'<span style="color:#2ecc71;">{ok_count}</span>'
+            f' / '
+            f'<span style="color:#e74c3c;">{bad_count}</span>'
+            f' / '
+            f'<span style="color:#95a5a6;">{unknown_count}</span>'
+        )
+        cell.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
+        cell.setContentsMargins(4, 0, 0, 0)
+        cell.setStyleSheet("background: transparent;")
+        self._table.setCellWidget(table_row, len(_COLS) - 1, cell)
 
     def _on_select(self):
 
@@ -565,11 +649,12 @@ class MainWindow(QMainWindow):
 
         heuristic_results = pe_data.get("_meta", {}).get("heuristic_results", {})
         if heuristic_results and "results" in heuristic_results:
-            ok_count = heuristic_results.get("ok_count", 0)
-            bad_count = heuristic_results.get("bad_count", 0)
-            results = heuristic_results.get("results", {})
+            ok_count      = heuristic_results.get("ok_count", 0)
+            bad_count     = heuristic_results.get("bad_count", 0)
+            unknown_count = heuristic_results.get("unknown_count", 0)
+            results       = heuristic_results.get("results", {})
 
-            heuristic_lines = [f"Summary: {ok_count} OK / {bad_count} BAD\n"]
+            heuristic_lines = [f"Summary: {ok_count} OK / {bad_count} BAD / {unknown_count} Unknown\n"]
             heuristic_lines.append("=" * 50)
 
             for check_name, check_result in results.items():
