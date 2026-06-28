@@ -3,10 +3,26 @@ import os
 import requests
 
 
+def check_known_version(versions: list, version_id: str) -> tuple[str, str]:
+    """Check whether the current software version exists in the community database."""
+    if not versions or not version_id:
+        return "BAD", "Version not seen before — no community record. This could be a targeted attack or a new version. Please check with the software vendor."
+
+    for version in versions:
+        try:
+            v = json.loads(version) if isinstance(version, str) else version
+            if v.get("software_version_id") == version_id:
+                return "OK", "Version is known in the community database. Someone else has seen this version before."
+        except:
+            continue
+
+    return "BAD", "Version not seen before — no community record. This could be a targeted attack or a new version. Please check with the software vendor."
+
+
 def check_freeze_replay_attack(reviews, versions: list, current_file_version: str) -> tuple[str, str]:
     """Detects if user is stuck on older version with bad review while newer versions exist."""
     if not versions or not reviews or not current_file_version or type(reviews) != list:
-        return "OK", "Insufficient data for freeze attack check"
+        return "UNKNOWN", "Insufficient data for freeze attack check"
 
     has_bad_review = False
     for review in reviews:
@@ -19,7 +35,7 @@ def check_freeze_replay_attack(reviews, versions: list, current_file_version: st
             continue
 
     if not has_bad_review:
-        return "OK", "No bad reviews for current version"
+        return "OK", "No bad reviews for current version. You don't seem to be stuck on an older version with known issues."
 
     has_newer_version = False
     for version in versions:
@@ -33,10 +49,10 @@ def check_freeze_replay_attack(reviews, versions: list, current_file_version: st
             continue
 
     if has_newer_version:
-        return "BAD", f"Current version {current_file_version} has bad review(s) while newer versions exist"
-    return "OK", "Current version has bad review but no newer versions available"
+        return "BAD", f"Current version {current_file_version} has bad review(s) while newer versions exist. You may be stuck on an older version with known issues. Please check with the software vendor."
+    return "OK", "Current version has bad reviews, but no newer versions are known. Although risky, this does not appear to be a freeze/replay attack. Please check with the software vendor."
 
-def check_widespread_malware(reviews) -> tuple[str, str]:
+def check_bad_software(reviews) -> tuple[str, str]:
     """Detects if version has high proportion of negative reviews."""
     if not reviews or type(reviews) != list:
         return "OK", "No reviews available"
@@ -54,23 +70,23 @@ def check_widespread_malware(reviews) -> tuple[str, str]:
             continue
 
     if count_good + count_bad == 0:
-        return "OK", "No valid reviews"
+        return "UNKNOWN", "No valid reviews have been submitted yet."
 
     total_reviews = count_good + count_bad
     if total_reviews < 2:
-        return "BAD", f"Insufficient reviews ({total_reviews}) to assess malware risk"
+        return "UNKNOWN", f"Insufficient reviews ({total_reviews}) to assess quality/safety of this version."
 
     bad_proportion = count_bad / total_reviews
     if bad_proportion > 0.3:
-        return "BAD", f"High proportion of negative reviews ({bad_proportion:.1%})"
-    return "OK", f"Negative review proportion acceptable ({bad_proportion:.1%})"
+        return "BAD", f"This version has a high proportion of negative reviews (over {bad_proportion:.1%}). You should be cautious and check the reviews and/or with the software vendor before using this version."
+    return "OK", f"This version has an acceptable proportion of negative reviews (under {bad_proportion:.1%})."
 
 
 def check_targeted_malware(reviews) -> tuple[str, str]:
     """Detects if version is not popular (possible targeted attack)."""
     if len(reviews) < 2 or type(reviews) != list:
-        return "BAD", "Less than 2 reviews - possible targeted version?"
-    return "OK", "Community feedback available"
+        return "BAD", "Less than 2 reviews exist for this version. You maybe be the victim of a targeted version. Check with the vendor and the community."
+    return "OK", "This version has multiple community reviews, so it is less likely to be a targeted attack."
 
 
 def check_abusech(file_hash: str) -> tuple[str, str]:

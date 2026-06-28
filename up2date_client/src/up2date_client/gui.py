@@ -9,7 +9,7 @@ from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget,
     QVBoxLayout, QHBoxLayout, QSplitter,
     QPushButton, QTableWidget, QTableWidgetItem, QHeaderView,
-    QTabWidget, QTreeWidget, QTreeWidgetItem,
+    QTabWidget,
     QTextEdit, QAbstractItemView, QLabel,
     QLineEdit, QComboBox,
     QDialog, QDialogButtonBox, QFormLayout,
@@ -22,7 +22,7 @@ from up2date_client.api_client import APIClient
 from up2date_client import heuristics
 
 
-_COLS = ["Time", "PID", "Program Name", "Process Name", "Company", "Version", "Signed", "Known Version", "Reviews", "Heuristic Results (OK / BAD / Unknown)"]
+_COLS = ["Time", "Program Name", "Process Name", "Company", "Version", "Signed", "Reviews", "Heuristic Results (OK / BAD / Unknown)"]
 
 _GREEN = QColor("#2ecc71")
 _RED   = QColor("#e74c3c")
@@ -163,6 +163,7 @@ class ProcessHeuristicsWorker(QThread):
 
             reviews = self.program_data.get("_meta", {}).get("reviews", [])
             versions = self.program_data.get("_meta", {}).get("versions", [])
+            version_id = self.program_data.get("_meta", {}).get("software_version_id", "")
             fp = self.program_data.get("file_properties", {})
             current_file_version = fp.get("FileVersion", "") or ""
 
@@ -173,10 +174,12 @@ class ProcessHeuristicsWorker(QThread):
 
             file_hash = self.program_data.get("sha256", "")
 
-            for func_name in ["check_freeze_replay_attack", "check_widespread_malware", "check_targeted_malware", "check_abusech", "check_circl_hashlookup"]:
+            for func_name in ["check_known_version", "check_freeze_replay_attack", "check_bad_software", "check_targeted_malware", "check_abusech", "check_circl_hashlookup"]:
                 try:
                     func = getattr(heuristics, func_name)
-                    if func_name == "check_freeze_replay_attack":
+                    if func_name == "check_known_version":
+                        status, comment = func(versions, version_id)
+                    elif func_name == "check_freeze_replay_attack":
                         status, comment = func(reviews, versions, current_file_version)
                     elif func_name in ("check_abusech", "check_circl_hashlookup"):
                         status, comment = func(file_hash)
@@ -292,35 +295,10 @@ class MainWindow(QMainWindow):
         # detail tabs
         tabs = QTabWidget()
 
-        self._props_tree = QTreeWidget()
-        self._props_tree.setHeaderLabels(["Property", "Value"])
-        self._props_tree.header().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
-        tabs.addTab(self._props_tree, "File Properties")
-
-        self._sig_tree = QTreeWidget()
-        self._sig_tree.setHeaderLabels(["Field", "Value"])
-        self._sig_tree.header().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
-        tabs.addTab(self._sig_tree, "Signatures")
-
-        self._raw = QTextEdit()
-        self._raw.setReadOnly(True)
-        self._raw.setFont(QFont("Courier New", 9))
-        tabs.addTab(self._raw, "Raw JSON")
-
-        self._report_text = QTextEdit()
-        self._report_text.setReadOnly(True)
-        self._report_text.setFont(QFont("Courier New", 9))
-        tabs.addTab(self._report_text, "Software Report")
-
         self._reviews_text = QTextEdit()
         self._reviews_text.setReadOnly(True)
         self._reviews_text.setFont(QFont("Courier New", 9))
         tabs.addTab(self._reviews_text, "Reviews")
-
-        self._versions_text = QTextEdit()
-        self._versions_text.setReadOnly(True)
-        self._versions_text.setFont(QFont("Courier New", 9))
-        tabs.addTab(self._versions_text, "Known Versions")
 
         self._heuristic_text = QTextEdit()
         self._heuristic_text.setReadOnly(True)
@@ -382,12 +360,7 @@ class MainWindow(QMainWindow):
     def _clear(self):
         self._table.setRowCount(0)
         self._records.clear()
-        self._props_tree.clear()
-        self._sig_tree.clear()
-        self._raw.clear()
-        self._report_text.clear()
         self._reviews_text.clear()
-        self._versions_text.clear()
 
     def _set_server_status(self, is_online: bool):
         color = _GREEN if is_online else _RED
@@ -433,13 +406,11 @@ class MainWindow(QMainWindow):
 
         for col, (text, color) in enumerate([
             (datetime.now().strftime("%H:%M:%S"), None),
-            (str(meta["pid"]),                    None),
             (program_name,                        None),
             (meta["process_name"],                None),
             (company_name,                        None),
             (file_version,                        None),
             (signed_text,                         signed_col),
-            (loading_col,                         None),
             (loading_col,                         None),
             (loading_col,                         None),
         ]):
@@ -486,22 +457,6 @@ class MainWindow(QMainWindow):
         self._records[record_index]["_meta"]["report"] = details["report"]
         self._records[record_index]["_meta"]["versions"] = details.get("versions", [])
         self._records[record_index]["_meta"]["reviews"] = details.get("reviews", [])
-
-        #Check if version was seen before to update "Known Version" column:
-        version_seen = False
-        for version in details.get("versions", []):
-            try:
-                v = json.loads(version) if isinstance(version, str) else version
-                if v.get("software_version_id") == version_id:
-                    version_seen = True
-                    break
-            except:
-                continue
-
-        if version_seen:
-            self._table.setItem(table_row, len(_COLS) - 3, _item("YES", _GREEN))
-        else:
-            self._table.setItem(table_row, len(_COLS) - 3, _item("NO", _RED))
 
         #Check number of reviews to update "Reviews" column:
         reviews = details.get("reviews", [])
@@ -568,48 +523,6 @@ class MainWindow(QMainWindow):
             self._show_detail(self._records[rows[0].row()])
 
     def _show_detail(self, pe_data: dict):
-        self._raw.setPlainText(json.dumps(pe_data, indent=2, default=str))
-
-        self._props_tree.clear()
-        fp  = pe_data.get("file_properties", {})
-        sfi = fp.get("StringFileInfo") or {}
-
-        def branch(label: str, data: dict):
-            node = QTreeWidgetItem([label])
-            for k, v in data.items():
-                QTreeWidgetItem(node, [str(k), str(v) if v is not None else ""])
-            node.setExpanded(True)
-            self._props_tree.addTopLevelItem(node)
-
-        branch("Process Info",    pe_data.get("_meta", {}))
-        branch("String File Info", sfi)
-        ffi = fp.get("FixedFileInfo") or {}
-        if ffi:
-            branch("Fixed File Info", ffi)
-
-        self._sig_tree.clear()
-        for i, sig in enumerate(pe_data.get("signatures", [])):
-            sig_node = QTreeWidgetItem([f"Signature {i + 1}"])
-            QTreeWidgetItem(sig_node, ["Hash", sig.get("hash", "")])
-            certs_node = QTreeWidgetItem(["Certificates"])
-            for j, cert in enumerate(sig.get("certificates", [])):
-                cert_node = QTreeWidgetItem([f"Certificate {j + 1}"])
-                for k, v in cert.items():
-                    if k != "signature":
-                        QTreeWidgetItem(cert_node, [k, str(v)])
-                cert_node.setExpanded(True)
-                certs_node.addChild(cert_node)
-            certs_node.setExpanded(True)
-            sig_node.addChild(certs_node)
-            sig_node.setExpanded(True)
-            self._sig_tree.addTopLevelItem(sig_node)
-
-        report = pe_data.get("_meta").get("report", "")
-        if report:
-            self._report_text.setPlainText(report)
-        else:
-            self._report_text.setPlainText("No report data available")
-
         reviews = pe_data.get("_meta").get("reviews", [])
         if reviews:
             if isinstance(reviews, list):
@@ -630,22 +543,6 @@ class MainWindow(QMainWindow):
         else:
             self._reviews_text.setPlainText("No review data available")
 
-
-        versions = pe_data.get("_meta", {}).get("versions", [])
-        if versions:
-            version_lines = []
-            for version in versions:
-                try:
-                    v = json.loads(version) if isinstance(version, str) else version
-                    first_seen = v.get("first_seen", "N/A")
-                    version_id = v.get("software_version_id", "N/A")
-                    product_version = v.get("file_properties", {}).get("StringFileInfo", {}).get("ProductVersion", "N/A")
-                    version_lines.append(f"Version ID: {version_id}\nFirst Seen: {first_seen}\nProduct Version: {product_version}\n")
-                except:
-                    version_lines = [versions]
-            self._versions_text.setPlainText("\n".join(version_lines))
-        else:
-            self._versions_text.setPlainText("No known versions available")
 
         heuristic_results = pe_data.get("_meta", {}).get("heuristic_results", {})
         if heuristic_results and "results" in heuristic_results:
