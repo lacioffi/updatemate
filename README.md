@@ -3,7 +3,11 @@ Up2Date is a public, community-driven update transparency solution.
 
 It allows you to publish and retrieve information about existing software versions in your machine, and automatically looks for signs of malicious or broken updates.
 
-<img width="1095" height="725" alt="image" src="https://github.com/user-attachments/assets/e469b1e7-52d9-45dd-9224-e20ccbe3af24" />
+
+
+https://github.com/user-attachments/assets/b381d215-bed0-4d74-aec5-2dfcc1d32a9e
+
+
 
 ## In plain english, please?
 Your printer's client auto-updated from v7.5.123 to v7.6.1 when you weren't looking.
@@ -29,7 +33,7 @@ The client is responsible for running localy on each user's machine and:
 * Facilitating the communication with UP2DATE servers (e.g., uploading new reviews, seeing existing reviews, gathering data, etc.)
 * Running heuristics to detect signs of malicious updates
 
-If supplied with an anthropic API key, it can also use external AI models through a custom harness to generate suggestions regarding each executable's safety.
+If supplied with a Gemini API key, it can also use external AI models through a custom harness to generate suggestions regarding each executable's safety.
 
 ## Server
 The server is responsible for receiving data from users and replying to data queries.
