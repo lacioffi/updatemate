@@ -33,7 +33,7 @@ The client is responsible for running localy on each user's machine and:
 * Facilitating the communication with UP2DATE servers (e.g., uploading new reviews, seeing existing reviews, gathering data, etc.)
 * Running heuristics to detect signs of malicious updates
 
-If supplied with an anthropic API key, it can also use external AI models through a custom harness to generate suggestions regarding each executable's safety.
+If supplied with a Gemini API key, it can also use external AI models through a custom harness to generate suggestions regarding each executable's safety.
 
 ## Server
 The server is responsible for receiving data from users and replying to data queries.
