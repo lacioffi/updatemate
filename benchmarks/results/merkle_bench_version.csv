@@ -1,0 +1,7 @@
+regime,n_entries,cumulative_append_time_s,append_throughput_entries_per_s,raw_payload_bytes,db_file_bytes,storage_overhead_ratio,bytes_per_entry_overhead,inclusion_proof_gen_ms,inclusion_proof_verify_ms,inclusion_proof_bytes,inclusion_verified_ok,consistency_proof_gen_ms,consistency_proof_verify_ms,consistency_proof_bytes,consistency_verified_ok,consistency_prev_n
+version,10,0.013,772.1,234171,258048,1.102,2387.7,0.2381,0.0533,456,True,0.0,0.0,0,,0
+version,50,0.0657,760.5,1171605,1241088,1.0593,1389.66,0.3564,0.0268,598,True,0.1759,0.016,617,True,10
+version,100,0.1277,783.1,2343515,2469888,1.0539,1263.73,1.1757,0.0216,670,True,0.6172,0.021,692,True,50
+version,500,0.6091,820.9,11727602,12300288,1.0488,1145.37,6.0415,0.0218,812,True,2.7691,0.0232,840,True,100
+version,1000,1.206,829.2,23457431,24596480,1.0486,1139.05,7.1667,0.0788,884,True,2.7084,0.0309,915,True,500
+version,5000,6.0183,830.8,117388387,122937344,1.0473,1109.79,49.7969,0.054,1097,True,32.4243,0.0382,1137,True,1000

@@ -1,5 +1,5 @@
-# UP2DATE
-Up2Date is a public, community-driven update transparency solution.
+# UPDATEMATE
+UpdateMate is a public, community-driven update transparency solution.
 
 It allows you to publish and retrieve information about existing software versions in your machine, and automatically looks for signs of malicious or broken updates.
 
@@ -13,7 +13,7 @@ https://github.com/user-attachments/assets/b381d215-bed0-4d74-aec5-2dfcc1d32a9e
 Your printer's client auto-updated from v7.5.123 to v7.6.1 when you weren't looking.
 Is this new version safe? Is it good? Does it still support your old printer? 
 
-Up2Date helps you to detect these changes and answer these questions through:
+UpdateMate helps you to detect these changes and answer these questions through:
 
 1 - Continuously monitoring your machine for all launched software and notifying you.
 
@@ -25,12 +25,12 @@ Up2Date helps you to detect these changes and answer these questions through:
 If you're not very technical, don't worry - it also comes with an AI integration to parse all this nerdy mumbojumbo and let you know if you should run the new version or not.
 
 # General Architecture
-Up2Date is composed of two programs:
+UpdateMate is composed of two programs:
 
 ## Client
 The client is responsible for running localy on each user's machine and:
 * Monitoring running executables
-* Facilitating the communication with UP2DATE servers (e.g., uploading new reviews, seeing existing reviews, gathering data, etc.)
+* Facilitating the communication with UPDATEMATE servers (e.g., uploading new reviews, seeing existing reviews, gathering data, etc.)
 * Running heuristics to detect signs of malicious updates
 
 If supplied with a Gemini API key, it can also use external AI models through a custom harness to generate suggestions regarding each executable's safety.
@@ -43,7 +43,7 @@ Merkle data is stored in multiple SQLite databases, stored locally.
 A more complete view is seen below:
 <img width="1012" height="658" alt="image" src="https://github.com/user-attachments/assets/35d52d76-ac2d-4ac2-9f84-2bedd042d854" />
 
-# Running Up2Date
+# Running UpdateMate
 This is a PoC version. It comes with a client and a server. It only runs on the Windows operating system.
 To test it, you must spin up both programs. By default, it is configured to run in the same machine, but of course you can run the server separately as well. More information below.
 
@@ -51,14 +51,14 @@ You must have `poetry` installed in your machine.
 If you do not have poetry, follow the official installation instructions here: https://python-poetry.org/docs/
 
 ## Running the Server
-To spin up the server locally, cd into the server folder and run `poetry install`, then `poetry run up2date_server`.
+To spin up the server locally, cd into the server folder and run `poetry install`, then `poetry run updatemate_server`.
 To run in hot reload mode, just set the environment variable `DEBUG` to `True`.
 
-A set of test data is included with this repository under `up2date_server/merkle_data/`. It is used automatically.
+A set of test data is included with this repository under `updatemate_server/merkle_data/`. It is used automatically.
 If you want to start with a fresh database, simply delete the files in that folder (but not the folder itself).
 
 ## Running the Client
-To run the client, cd into the client folder and run `poetry install`, then `poetry run up2date_client`
+To run the client, cd into the client folder and run `poetry install`, then `poetry run updatemate_client`
 
 Note: you may have to install PyQt5 manually: `poetry run pip install pyqt5`, `poetry run pip install pyqt5-qt5`
 
@@ -82,7 +82,7 @@ You have two options:
 2. Click the **Configuration** button in the toolbar.
 3. Paste your API key into the *abuse.ch API Key* field and click **OK**.
 
-The key is saved to `~/.up2date_config.json` and loaded automatically on every subsequent launch.
+The key is saved to `~/.updatemate_config.json` and loaded automatically on every subsequent launch.
 
 **Option B — Via environment variable:**
 
@@ -91,13 +91,13 @@ Set the `ABUSECH_API_KEY` environment variable before launching the client:
 ```powershell
 # PowerShell
 $env:ABUSECH_API_KEY = "your-api-key-here"
-poetry run up2date_client
+poetry run updatemate_client
 ```
 
 ```cmd
 :: Command Prompt
 set ABUSECH_API_KEY=your-api-key-here
-poetry run up2date_client
+poetry run updatemate_client
 ```
 
 An environment variable set this way takes precedence over any key saved through the GUI.
@@ -120,20 +120,20 @@ The client can send all available binary data (file info, community reviews, heu
 2. Click the **Configuration** button in the toolbar.
 3. Paste your key into the *Gemini API Key* field and click **OK**.
 
-The key is saved to `~/.up2date_config.json` and loaded automatically on every subsequent launch.
+The key is saved to `~/.updatemate_config.json` and loaded automatically on every subsequent launch.
 
 **Option B — Via environment variable:**
 
 ```powershell
 # PowerShell
 $env:GEMINI_API_KEY = "your-api-key-here"
-poetry run up2date_client
+poetry run updatemate_client
 ```
 
 ```cmd
 :: Command Prompt
 set GEMINI_API_KEY=your-api-key-here
-poetry run up2date_client
+poetry run updatemate_client
 ```
 
 If no key is configured, the AI Suggestion column will remain blank and the AI Analysis tab will display a message indicating the key is missing.

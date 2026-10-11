@@ -1,0 +1,6 @@
+threshold,genuine_reviews,sybil_reviews_needed
+0.2,100,26
+0.25,100,34
+0.3,100,43
+0.35,100,54
+0.4,100,67

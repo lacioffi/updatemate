@@ -1,5 +1,0 @@
-flask
-flask_sqlalchemy
-psycopg2-binary
-requests
-pymerkle
