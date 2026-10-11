@@ -1,0 +1,32 @@
+[project]
+name = "updatemate_client"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "lacioffi",email = "lucasacioffi@gmail.com"}
+]
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "pathlib (>=1.0.1,<2.0.0)",
+    "pywin32 (>=311,<312)",
+    "lief (>=0.17.6,<0.18.0)",
+    "pyqt5-qt (==5.15.2)",
+    "requests (>=2.28.0)",
+    "cryptography (>=42.0.0,<47.0.0)",
+]
+
+[tool.poetry]
+packages = [{include = "updatemate_client", from = "src"}]
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[dependency-groups]
+dev = [
+    "pytest (>=9.0.2,<10.0.0)"
+]
+
+[project.scripts]
+updatemate_client = "updatemate_client.gui:run_app"

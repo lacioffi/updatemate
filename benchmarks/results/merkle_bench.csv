@@ -1,0 +1,7 @@
+regime,n_entries,cumulative_append_time_s,append_throughput_entries_per_s,db_file_bytes,storage_overhead_ratio,inclusion_proof_gen_ms,inclusion_proof_verify_ms,inclusion_proof_bytes,consistency_proof_gen_ms,consistency_proof_bytes
+review,10,0.009,1111.1,12583,8.090,0.202,0.014,456,0.000,0
+review,100,0.086,1162.8,32506,2.156,0.329,0.023,670,0.239,692
+review,1000,0.874,1144.2,217055,1.423,1.627,0.024,884,0.932,915
+review,10000,9.046,1105.5,2060452,1.343,15.407,0.084,1169,9.764,1212
+review,100000,87.360,1144.7,20541604,1.330,153.515,0.043,1383,98.678,1435
+review,500000,432.785,1155.3,102670270,1.322,798.976,0.044,1525,261.340,1583

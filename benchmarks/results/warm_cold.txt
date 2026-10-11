@@ -1,0 +1,4 @@
+N=100000
+cold_first_query_ms=159.650
+warm_repeat_query_ms=6.409
+warm_recent_leaf_ms=112.823
