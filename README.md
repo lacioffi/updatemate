@@ -41,7 +41,8 @@ It is basically an API implemented using Flask.
 Merkle data is stored in multiple SQLite databases, stored locally.
 
 A more complete view is seen below:
-<img width="1012" height="658" alt="image" src="https://github.com/user-attachments/assets/35d52d76-ac2d-4ac2-9f84-2bedd042d854" />
+<img width="915" height="316" alt="whatever" src="https://github.com/user-attachments/assets/1ddcf531-be0d-46a1-8e64-5610e3487432" />
+
 
 # Running UpdateMate
 This is a PoC version. It comes with a client and a server. It only runs on the Windows operating system.
