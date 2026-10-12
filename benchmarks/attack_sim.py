@@ -1,5 +1,5 @@
 """
-Quantitative evaluation of UP2DATE's detection heuristics, calling the
+Quantitative evaluation of UpdateMate's detection heuristics, calling the
 ACTUAL functions from updatemate_client/src/updatemate_client/heuristics.py
 (unmodified) against synthetic review/version populations.
 

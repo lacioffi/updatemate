@@ -56,7 +56,7 @@ for size in sorted(set(int(r["community_size"]) for r in broad)):
     ax2.plot(x, y, marker="o", label=f"N = {size}", markersize=3)
 ax2.axvline(0.30, color="gray", linestyle="--", linewidth=1, label="30% threshold")
 ax2.set_xlabel("Fraction of community correctly reporting")
-ax2.set_ylabel("P(UP2DATE raises an alarm)")
+ax2.set_ylabel("P(UpdateMate raises an alarm)")
 ax2.set_title("(b) Real detection of a broad release", fontsize=9)
 ax2.legend(fontsize=6, loc="lower right")
 ax2.grid(True, alpha=0.3)

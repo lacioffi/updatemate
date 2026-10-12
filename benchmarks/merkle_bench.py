@@ -1,5 +1,5 @@
 """
-Benchmark for UP2DATE's Merkle-tree ledger, built directly on pymerkle 6.1.0
+Benchmark for UpdateMate's Merkle-tree ledger, built directly on pymerkle 6.1.0
 (the exact library and version pinned in updatemate_server/pyproject.toml),
 using pymerkle.SqliteTree (the exact tree class used by updatemate_server's
 SoftwareRegistry in merkle.py).
@@ -10,7 +10,7 @@ Measures, as a function of ledger size N:
   - inclusion proof generation time, verification time, and serialized size
   - consistency proof generation time, verification time, and serialized size
 
-Two entry-size regimes are benchmarked, matching UP2DATE's real data shapes:
+Two entry-size regimes are benchmarked, matching UpdateMate's real data shapes:
   - "version" entries (~30KB): full software-version submissions with
     certificate chains, taken from the shape of the project's own test
     fixtures (updatemate_server/tests/data/chrome_1.json).
@@ -47,7 +47,7 @@ random.seed(1337)
 
 
 def make_version_entry(i):
-    """~30KB entry approximating a real UP2DATE software-version submission
+    """~30KB entry approximating a real UpdateMate software-version submission
     (dominated by the base64 signature raw_data field + cert chain), matching
     the byte scale of updatemate_server/tests/data/chrome_1.json (32,127 bytes)."""
     raw_data = ''.join(random.choices(string.ascii_letters + string.digits, k=20768))
@@ -69,7 +69,7 @@ def make_version_entry(i):
 
 
 def make_review_entry(i):
-    """~250B entry approximating a real UP2DATE community review submission."""
+    """~250B entry approximating a real UpdateMate community review submission."""
     entry = {
         "reviewer": f"user{i}",
         "comment": "Works as expected, no issues found after a week of use.",

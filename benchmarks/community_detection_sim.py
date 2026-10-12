@@ -2,13 +2,13 @@
 Simulated detection of malicious updates using the ACTUAL functions from
 updatemate_client/src/updatemate_client/heuristics.py (unmodified), directly
 answering a specific reviewer-facing gap: the paper has no real-world
-deployment to draw review data from (UP2DATE has not been fielded at
+deployment to draw review data from (UpdateMate has not been fielded at
 scale), and determining ground-truth "is this binary malicious" is a
-separate malware-analysis problem outside UP2DATE's scope. What we CAN
+separate malware-analysis problem outside UpdateMate's scope. What we CAN
 evaluate with the real heuristic code is the other half of the question:
 *given* a malicious update was released, and *given* that some fraction of
 the users who received it correctly recognize and report it as such, does
-UP2DATE's detection layer raise an alarm, and at what fraction?
+UpdateMate's detection layer raise an alarm, and at what fraction?
 
 Two experiments, modeled on two real incidents with structurally different
 distribution patterns:
@@ -20,7 +20,7 @@ distribution patterns:
      targeted subset of the full user base, structurally identical to
      ShadowHammer's ~600 MAC-address whitelist but not firmware/BIOS
      related, and, being itself a software auto-updater, an unusually
-     direct match for UP2DATE's own threat model. We simulate small
+     direct match for UpdateMate's own threat model. We simulate small
      recipient subsets and sweep the fraction of that subset that
      correctly reports the update as malicious/vulnerable.
 
