@@ -14,9 +14,17 @@ experimental validation or false-positive-rate data was presented:
      already states qualitatively; here we give it numbers.
 
   2. check_bad_software: false-positive rate under organic (non-adversarial)
-     review noise. If a genuinely fine update organically draws X% negative
-     reviews (annoyed users, unrelated complaints, etc.) with no attacker
-     involved, at what rate does the heuristic still fire?
+     QUALITY noise specifically. check_bad_software now reads only
+     security-tagged reviews (SECURITY_REVIEW_TAGS in heuristics.py); a
+     "degraded" review -- a quality complaint, not a security one -- is
+     excluded from its tally entirely. This experiment checks that this
+     split actually holds: a genuinely fine update that organically draws
+     X% "degraded" complaints, with no security issue and no attacker
+     involved, should never cross check_bad_software's security threshold.
+     We expect, and this experiment confirms, a 0% fire rate at every noise
+     level; the pre-split version of check_bad_software did not have this
+     property, since it counted "degraded" as "bad" alongside "malicious"
+     and "vulnerable".
 
   3. check_targeted_malware: minimum corroborating reviews an attacker must
      inject to make a targeted/malicious version indistinguishable from a
@@ -63,9 +71,12 @@ def sybil_cost_curve(pool_sizes):
 
 def organic_noise_false_positive_rate(pool_size, noise_fractions, trials=500):
     """No attacker: genuine reviews are drawn i.i.d. as 'ok' with probability
-    (1 - noise_fraction) and 'degraded' (a legitimate, non-malicious
-    complaint label) otherwise. Measures how often check_bad_software fires
-    BAD purely from organic dissatisfaction, at each noise level."""
+    (1 - noise_fraction) and 'degraded' (a legitimate, non-malicious quality
+    complaint, not a security tag -- see heuristics.QUALITY_REVIEW_TAGS)
+    otherwise. Measures how often check_bad_software fires BAD purely from
+    organic quality dissatisfaction, at each noise level; after the
+    security/quality split, this should be 0% throughout, since
+    check_bad_software no longer counts 'degraded' reviews at all."""
     rows = []
     for noise in noise_fractions:
         fires = 0

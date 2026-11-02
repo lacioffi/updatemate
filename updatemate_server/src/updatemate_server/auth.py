@@ -26,6 +26,7 @@ synthetic one built by scripts/demo_auth_flow.py.
 """
 import hashlib
 import json
+import os
 from typing import Iterable, List
 
 
@@ -196,3 +197,103 @@ def is_developer_submission(signer_public_key_pem: str, version_raw_data_hex_lis
         if signer_der in extract_code_signing_public_keys(raw_data_hex):
             return True
     return False
+
+
+# ----------------------------------------------------------------------
+# Signed tree heads (Section 8.2 of the paper).
+#
+# Everything above this point is about verifying signatures *submitted
+# to* the server. This part is the opposite direction: the server
+# signing its own statements about ledger state, the same way a
+# Certificate Transparency log signs a Signed Tree Head (STH). Without
+# this, a root hash the server hands an auditor is just an unsigned HTTP
+# payload -- if two auditors ever compared notes and found the server
+# had told them different things, there would be no artifact proving
+# the server committed to either claim, only each auditor's word for
+# what they were told. A signed tree head is self-contained: an auditor
+# can hand it to a third party who was never part of the original
+# request, and that party can verify it against the server's public key
+# alone.
+#
+# The signing key here is a freshly generated Ed25519 keypair, persisted
+# to disk on first run and reused after that -- deliberately not
+# CA-issued. For this proof-of-concept, what the guarantee above needs
+# is that the SAME key sign every tree head for the life of the
+# deployment, not that the key itself arrived with an independent chain
+# of trust. A production deployment would do better to use a CA-issued
+# keypair (or publish the public key through some other independently
+# verifiable channel), so auditors aren't reduced to trust-on-first-use
+# ("pin whatever key the server first hands you") for the server's
+# signing identity itself, the same way SSH host keys are.
+# ----------------------------------------------------------------------
+
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+SERVER_KEY_FILENAME = "server_signing_key.pem"
+
+
+def load_or_create_server_keypair(key_dir: str) -> Ed25519PrivateKey:
+    """Loads the server's persistent signing key from `key_dir`,
+    generating and saving a fresh Ed25519 keypair on first run. Safe to
+    call every time the server starts: an existing key is reused as-is."""
+    os.makedirs(key_dir, exist_ok=True)
+    key_path = os.path.join(key_dir, SERVER_KEY_FILENAME)
+
+    if os.path.isfile(key_path):
+        with open(key_path, "rb") as f:
+            return serialization.load_pem_private_key(f.read(), password=None)
+
+    private_key = Ed25519PrivateKey.generate()
+    pem = private_key.private_bytes(
+        serialization.Encoding.PEM,
+        serialization.PrivateFormat.PKCS8,
+        serialization.NoEncryption(),
+    )
+    with open(key_path, "wb") as f:
+        f.write(pem)
+    return private_key
+
+
+def server_public_key_pem(private_key) -> str:
+    """PEM-encoded public key, suitable for an auditor to fetch once and
+    pin, then use to verify every signed tree head afterwards."""
+    return private_key.public_key().public_bytes(
+        serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo
+    ).decode("utf-8")
+
+
+def canonical_tree_head_payload(tree_id: str, size: int, root_hash_hex: str, timestamp: str) -> bytes:
+    """Deterministic byte representation of a signed tree head: a
+    commitment to a specific (tree, size, root hash) triple at a
+    specific time. `tree_id` is bound into the payload for the same
+    reason `canonical_review_payload` binds `version_id` -- so a signed
+    statement about one tree (say, one software's version history)
+    can't be replayed as if it were a statement about a different tree
+    that happens to reach the same size and root hash."""
+    obj = {
+        "tree_id": tree_id,
+        "size": size,
+        "root_hash": root_hash_hex,
+        "timestamp": timestamp,
+    }
+    return json.dumps(obj, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+
+def sign_tree_head(private_key, tree_id: str, size: int, root_hash_hex: str, timestamp: str) -> str:
+    """Signs a tree head with the server's own key; returns the
+    signature as a hex string."""
+    payload = canonical_tree_head_payload(tree_id, size, root_hash_hex, timestamp)
+    return private_key.sign(payload).hex()
+
+
+def verify_tree_head(public_key, tree_id: str, size: int, root_hash_hex: str, timestamp: str,
+                      signature_hex: str) -> bool:
+    """Auditor-side check: does `signature_hex` verify, under the
+    server's `public_key`, over this exact (tree, size, root hash,
+    timestamp) claim?"""
+    try:
+        signature = bytes.fromhex(signature_hex)
+    except Exception:
+        return False
+    payload = canonical_tree_head_payload(tree_id, size, root_hash_hex, timestamp)
+    return verify_signature(public_key, signature, payload)

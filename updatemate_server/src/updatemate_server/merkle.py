@@ -30,6 +30,12 @@ class SoftwareRegistry:
         self.master_tree = SqliteTree(path + "master_tree.db")
         self.path = path
 
+        # Persistent signing key for signed tree heads (Section 8.2 of the
+        # paper): generated once and reused across restarts, never
+        # regenerated. See auth.load_or_create_server_keypair's docstring
+        # for why a fresh, self-generated key is adequate here.
+        self.server_private_key = auth.load_or_create_server_keypair(path)
+
     def _load_version_index(self) -> dict:
         idx_path = self.path + self.VERSION_INDEX_FILENAME
         if os.path.isfile(idx_path):
@@ -63,12 +69,22 @@ class SoftwareRegistry:
 
         software_data = json.dumps(software_version.__dict__, default=lambda o: o.__dict__, sort_keys=True) # Sort keys for consistent hashing
 
+        # Check if software is already registered in Master Tree. This must
+        # be a file-existence check, not a Merkle-tree lookup: SqliteTree's
+        # get_entry() takes a leaf INDEX (an int), not arbitrary content to
+        # search for, so a prior version of this check -- which called
+        # get_entry(software_name.encode('utf-8')) -- always missed (no
+        # leaf has that "index") and silently re-registered the same
+        # software on every single version submission, inflating the
+        # Master Tree and get_root_audit's registered_software_count.
+        software_already_registered = os.path.isfile(self.path + f"{software_name}_tree.db")
+
         with SqliteTree(self.path + f"master_tree.db") as master_tree:
-            if not master_tree.get_entry(software_name.encode('utf-8')): # Check if software is already registered in Master Tree
+            if not software_already_registered:
                 # REGISTER the new tree in the Master Tree, using the software's name
-                master_tree.append_entry(software_name.encode('utf-8')) 
+                master_tree.append_entry(software_name.encode('utf-8'))
                 print(f"[REGISTERED] {software_name} added to Master Tree.")
-        
+
 
         with SqliteTree(self.path + f"{software_name}_tree.db") as software_tree:
             software_tree.append_entry(software_data.encode('utf-8')) # Create tree for software if needed. Add version
@@ -235,20 +251,41 @@ class SoftwareRegistry:
 
         return reviews
     
+    def _sign_tree_head(self, tree_id: str, size: int, root_hash_hex: str) -> dict:
+        """Builds a signed tree head over (tree_id, size, root_hash):
+        the server's own, portable commitment to that claim, verifiable
+        by anyone who holds its public key (get_server_public_key),
+        independent of the request that produced it. See auth.py's
+        "Signed tree heads" section and Section 8.2 of the paper."""
+        timestamp = datetime.now().isoformat()
+        signature = auth.sign_tree_head(self.server_private_key, tree_id, size, root_hash_hex, timestamp)
+        return {"timestamp": timestamp, "signature": signature}
+
+    def get_server_public_key(self) -> str:
+        """PEM-encoded public key an auditor fetches once and pins, then
+        uses to verify every signed tree head this server issues."""
+        return auth.server_public_key_pem(self.server_private_key)
+
     def get_root_audit(self):
         """Get the current state of the Master Tree, which contains all registered software products. This is the main audit result that can be publicly verified."""
         with SqliteTree(self.path + f"master_tree.db") as master_tree:
-            root_hash = master_tree.get_state().hex()
-            return {"root_hash": root_hash, "registered_software_count": master_tree.get_size(), "tree": Path(self.path + f"master_tree.db").read_bytes().hex()}
-        
+            size = master_tree.get_size()
+            root_hash = master_tree.get_state(size).hex()
+            result = {"root_hash": root_hash, "registered_software_count": size, "tree": Path(self.path + f"master_tree.db").read_bytes().hex()}
+            result.update(self._sign_tree_head("master", size, root_hash))
+            return result
+
     def get_software_audit(self, software_name):
         """Get the audit result for a specific software product."""
         if not os.path.isfile(self.path + f"{software_name}_tree.db"):
             return f"Product {software_name} not found."
 
         with SqliteTree(self.path + f"{software_name}_tree.db") as software_tree:
-            root_hash = software_tree.get_state().hex()
-            return {"root_hash": root_hash, "versions_count": software_tree.get_size(), "tree": Path(self.path + f"{software_name}_tree.db").read_bytes().hex()}
+            size = software_tree.get_size()
+            root_hash = software_tree.get_state(size).hex()
+            result = {"root_hash": root_hash, "versions_count": size, "tree": Path(self.path + f"{software_name}_tree.db").read_bytes().hex()}
+            result.update(self._sign_tree_head(f"software:{software_name}", size, root_hash))
+            return result
         
     def get_software_version_audit(self, software_version_id):
         """Get the audit result for a specific software version."""
@@ -256,5 +293,99 @@ class SoftwareRegistry:
             return f"{software_version_id} not found in system. You must first upload the version's data before submitting a comment."
 
         with SqliteTree(self.path + f"{software_version_id}_reviews_tree.db") as reviews_tree:
-            root_hash = reviews_tree.get_state().hex()
-            return {"root_hash": root_hash, "reviews_count": reviews_tree.get_size(), "tree": Path(self.path + f"{software_version_id}_reviews_tree.db").read_bytes().hex()}
+            size = reviews_tree.get_size()
+            root_hash = reviews_tree.get_state(size).hex()
+            result = {"root_hash": root_hash, "reviews_count": size, "tree": Path(self.path + f"{software_version_id}_reviews_tree.db").read_bytes().hex()}
+            result.update(self._sign_tree_head(f"version_reviews:{software_version_id}", size, root_hash))
+            return result
+
+    # ------------------------------------------------------------------
+    # Lightweight audit: consistency- and inclusion-proof endpoints.
+    #
+    # The get_*_audit methods above transmit the entire underlying tree,
+    # which lets an auditor re-derive anything from scratch but costs
+    # O(n) bandwidth. An auditor who already holds a trusted (root_hash,
+    # size) pair from an earlier visit doesn't need that: pymerkle can
+    # generate a consistency proof of O(log n) size showing that the
+    # tree's state at a later size is a legitimate append-only extension
+    # of its state at an earlier size, and an inclusion proof of the same
+    # size showing a specific entry belongs to a given state. Neither
+    # proof contains the tree's actual entries -- only the handful of
+    # internal subtree hashes needed to recompute both root hashes
+    # locally (Section 8.2 of the paper). These are what back the
+    # /audit/.../consistency and /audit/.../inclusion routes.
+    # ------------------------------------------------------------------
+
+    def get_root_consistency_proof(self, size1, size2=None):
+        """Proof that the Master Tree's state at size2 (default: current)
+        is an append-only extension of its state at size1."""
+        with SqliteTree(self.path + f"master_tree.db") as master_tree:
+            proof = master_tree.prove_consistency(size1, size2)
+            result = proof.serialize()
+            root_hash = master_tree.get_state(proof.size).hex()
+            result["signed_tree_head"] = {"root_hash": root_hash, "size": proof.size,
+                **self._sign_tree_head("master", proof.size, root_hash)}
+            return result
+
+    def get_root_inclusion_proof(self, index, size=None):
+        """Proof that the entry at `index` belongs to the Master Tree's
+        state at `size` (default: current)."""
+        with SqliteTree(self.path + f"master_tree.db") as master_tree:
+            proof = master_tree.prove_inclusion(index, size)
+            result = proof.serialize()
+            root_hash = master_tree.get_state(proof.size).hex()
+            result["signed_tree_head"] = {"root_hash": root_hash, "size": proof.size,
+                **self._sign_tree_head("master", proof.size, root_hash)}
+            return result
+
+    def get_software_consistency_proof(self, software_name, size1, size2=None):
+        """Per-software equivalent of get_root_consistency_proof."""
+        if not os.path.isfile(self.path + f"{software_name}_tree.db"):
+            return f"Product {software_name} not found."
+
+        with SqliteTree(self.path + f"{software_name}_tree.db") as software_tree:
+            proof = software_tree.prove_consistency(size1, size2)
+            result = proof.serialize()
+            root_hash = software_tree.get_state(proof.size).hex()
+            result["signed_tree_head"] = {"root_hash": root_hash, "size": proof.size,
+                **self._sign_tree_head(f"software:{software_name}", proof.size, root_hash)}
+            return result
+
+    def get_software_inclusion_proof(self, software_name, index, size=None):
+        """Per-software equivalent of get_root_inclusion_proof."""
+        if not os.path.isfile(self.path + f"{software_name}_tree.db"):
+            return f"Product {software_name} not found."
+
+        with SqliteTree(self.path + f"{software_name}_tree.db") as software_tree:
+            proof = software_tree.prove_inclusion(index, size)
+            result = proof.serialize()
+            root_hash = software_tree.get_state(proof.size).hex()
+            result["signed_tree_head"] = {"root_hash": root_hash, "size": proof.size,
+                **self._sign_tree_head(f"software:{software_name}", proof.size, root_hash)}
+            return result
+
+    def get_software_version_consistency_proof(self, software_version_id, size1, size2=None):
+        """Per-version-reviews equivalent of get_root_consistency_proof."""
+        if not os.path.isfile(self.path + f"{software_version_id}_reviews_tree.db"):
+            return f"{software_version_id} not found in system. You must first upload the version's data before submitting a comment."
+
+        with SqliteTree(self.path + f"{software_version_id}_reviews_tree.db") as reviews_tree:
+            proof = reviews_tree.prove_consistency(size1, size2)
+            result = proof.serialize()
+            root_hash = reviews_tree.get_state(proof.size).hex()
+            result["signed_tree_head"] = {"root_hash": root_hash, "size": proof.size,
+                **self._sign_tree_head(f"version_reviews:{software_version_id}", proof.size, root_hash)}
+            return result
+
+    def get_software_version_inclusion_proof(self, software_version_id, index, size=None):
+        """Per-version-reviews equivalent of get_root_inclusion_proof."""
+        if not os.path.isfile(self.path + f"{software_version_id}_reviews_tree.db"):
+            return f"{software_version_id} not found in system. You must first upload the version's data before submitting a comment."
+
+        with SqliteTree(self.path + f"{software_version_id}_reviews_tree.db") as reviews_tree:
+            proof = reviews_tree.prove_inclusion(index, size)
+            result = proof.serialize()
+            root_hash = reviews_tree.get_state(proof.size).hex()
+            result["signed_tree_head"] = {"root_hash": root_hash, "size": proof.size,
+                **self._sign_tree_head(f"version_reviews:{software_version_id}", proof.size, root_hash)}
+            return result

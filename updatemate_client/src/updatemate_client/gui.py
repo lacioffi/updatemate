@@ -223,10 +223,20 @@ class ProcessGetDetailsWorker(QThread):
                         vreviews = vreviews_response.get("reviews", [])
                         vreviews = json.loads(vreviews) if isinstance(vreviews, str) else vreviews
                         if isinstance(vreviews, list):
+                            # Developer-verified reviews (Section 6.5) are
+                            # excluded from these tallies on purpose: they
+                            # are not an independent community signal, and
+                            # these counts feed heuristics.check_rare_version
+                            # / check_version_duplicate via review_counts
+                            # below, which must stay unmovable by a
+                            # compromised developer signing key (see
+                            # heuristics._community_reviews).
                             ok_count = 0
                             bad_count = 0
                             for review in vreviews:
                                 r = json.loads(review) if isinstance(review, str) else review
+                                if r.get("developer_verified"):
+                                    continue
                                 if r.get("review") == "ok":
                                     ok_count += 1
                                 else:
@@ -272,11 +282,18 @@ class ProcessHeuristicsWorker(QThread):
 
             file_hash = self.program_data.get("sha256", "")
 
-            for func_name in ["check_known_version", "check_freeze_replay_attack", "check_bad_software", "check_CA_change", "check_targeted_malware", "check_abusech", "check_circl_hashlookup"]:
+            version_summaries = self.program_data.get("_meta", {}).get("version_summaries", [])
+            review_counts = {
+                vs["version_id"]: vs.get("total_count", 0)
+                for vs in version_summaries
+                if vs.get("version_id")
+            }
+
+            for func_name in ["check_rare_version", "check_version_duplicate", "check_freeze_replay_attack", "check_bad_software", "check_degraded_software", "check_CA_change", "check_targeted_malware", "check_abusech", "check_circl_hashlookup"]:
                 try:
                     func = getattr(heuristics, func_name)
-                    if func_name == "check_known_version":
-                        status, comment = func(versions, version_id)
+                    if func_name in ("check_rare_version", "check_version_duplicate"):
+                        status, comment = func(versions, version_id, review_counts)
                     elif func_name == "check_freeze_replay_attack":
                         status, comment = func(reviews, versions, current_file_version)
                     elif func_name == "check_CA_change":

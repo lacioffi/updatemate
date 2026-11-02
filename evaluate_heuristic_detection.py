@@ -68,11 +68,16 @@ def run_sweep():
     results = {"degraded": {}, "malicious": {}, "targeted": {}}
 
     # Degraded release: single known version, sweep x = detection rate.
+    # Uses check_degraded_software, not check_bad_software: "degraded" is a
+    # quality tag (QUALITY_REVIEW_TAGS), and the two heuristics no longer
+    # share a tally (see heuristics.py). The 30%-threshold math is otherwise
+    # identical, so this reproduces the same curve the pre-split
+    # check_bad_software call would have produced from these same reviews.
     for rate in RATES:
         bad = 0
         for _ in range(N_TRIALS):
             reviews = sample_reviews(rate, "degraded")
-            status, _ = heuristics.check_bad_software(reviews)
+            status, _ = heuristics.check_degraded_software(reviews)
             if status == "BAD":
                 bad += 1
         results["degraded"][rate] = bad / N_TRIALS
@@ -93,22 +98,25 @@ def run_sweep():
         results["malicious"][rate] = {"bad_software": bad_bs / N_TRIALS, "freeze_replay": bad_fr / N_TRIALS}
 
     # Targeted malicious build: at most 1 possible reviewer, version absent from the ledger.
-    # Checked at three representative rates to confirm check_known_version and
-    # check_targeted_malware don't depend on detection rate at all.
+    # Checked at three representative rates to confirm check_rare_version and
+    # check_targeted_malware don't depend on detection rate at all. check_rare_version
+    # correctly reports UNKNOWN here (not BAD) because the version is absent from the
+    # ledger entirely, so it has no predecessor to compare its review count against --
+    # this is the documented new-version/isolated-version misfire case, not a bug.
     for rate in [0, 50, 100]:
         tallies = {name: {"OK": 0, "BAD": 0, "UNKNOWN": 0} for name in
-                   ["check_known_version", "check_targeted_malware", "check_bad_software", "check_freeze_replay_attack"]}
+                   ["check_rare_version", "check_targeted_malware", "check_bad_software", "check_freeze_replay_attack"]}
         detect_p = rate / 100.0
         for _ in range(N_TRIALS):
             if rng.random() < detect_p:
                 reviews = [make_review("malicious")] if rng.random() < REPORT_RATE_ON_DETECT else []
             else:
                 reviews = [make_review("ok")] if rng.random() < AMBIENT_RATE else []
-            s1, _ = heuristics.check_known_version([], "prod-vX-targeted")
+            s1, _ = heuristics.check_rare_version([], "prod-vX-targeted", {})
             s2, _ = heuristics.check_targeted_malware(reviews)
             s3, _ = heuristics.check_bad_software(reviews)
             s4, _ = heuristics.check_freeze_replay_attack(reviews, [], "9")
-            tallies["check_known_version"][s1] += 1
+            tallies["check_rare_version"][s1] += 1
             tallies["check_targeted_malware"][s2] += 1
             tallies["check_bad_software"][s3] += 1
             tallies["check_freeze_replay_attack"][s4] += 1
@@ -129,7 +137,7 @@ def plot(results, out_path):
 
     fig, ax = plt.subplots(figsize=(6, 4))
     ax.plot(rates, degraded_bs, marker="o", markersize=4, linewidth=1.6,
-            label="Degraded release -> check_bad_software", color="#1f77b4")
+            label="Degraded release -> check_degraded_software", color="#1f77b4")
     ax.plot(rates, malicious_bs, marker="s", markersize=4, linewidth=1.6, linestyle="--",
             label="Malicious build -> check_bad_software", color="#ff7f0e")
     ax.plot(rates, malicious_fr, marker="^", markersize=4, linewidth=1.6, linestyle=":",
